@@ -1,0 +1,15 @@
+node_modules/
+dist/
+desktop/web/
+desktop/dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+ios/Scrigno.xcodeproj/
+ios/build/
+ios/ScrignoCore/.build/
+tests/shot-*.png
+*.keystore
+*.jks
+.DS_Store

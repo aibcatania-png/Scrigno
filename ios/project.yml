@@ -1,0 +1,93 @@
+name: Scrigno
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SCRIGNO_APP_ID: app.scrigno.passwords
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  Scrigno:
+    type: application
+    platform: iOS
+    scheme: {}
+    sources:
+      - path: App
+      - path: ScrignoCore/Sources/ScrignoCore
+        group: Shared
+      - path: ../web
+        type: folder
+        buildPhase: resources
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Scrigno
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSFaceIDUsageDescription: Scrigno usa Face ID per sbloccare il vault.
+        ScrignoAppGroup: group.$(SCRIGNO_APP_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: Scrigno
+            CFBundleURLSchemes: [scrigno]
+        UIFileSharingEnabled: false
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    entitlements:
+      path: App/Scrigno.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(SCRIGNO_APP_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(SCRIGNO_APP_ID).shared]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SCRIGNO_APP_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: AutoFill
+        embed: true
+  AutoFill:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: AutoFill
+      - path: ScrignoCore/Sources/ScrignoCore
+        group: Shared
+    info:
+      path: AutoFill/Info.plist
+      properties:
+        CFBundleDisplayName: Scrigno
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSFaceIDUsageDescription: Scrigno usa Face ID per sbloccare il vault.
+        ScrignoAppGroup: group.$(SCRIGNO_APP_ID)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesPasskeys: true
+    entitlements:
+      path: AutoFill/AutoFill.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(SCRIGNO_APP_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(SCRIGNO_APP_ID).shared]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SCRIGNO_APP_ID).autofill
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO

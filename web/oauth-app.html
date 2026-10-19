@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Scrigno – accesso</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="center"><div class="card auth" id="box">
+  <div class="brand big"><img src="icons/icon.svg" width="40" height="40" alt=""><span>Scrigno</span></div>
+  <p id="msg">Completamento dell'accesso…</p>
+  <div id="codeBox" class="stack" hidden>
+    <p class="hint">Se Scrigno non si è aperta da sola, copia questo codice e incollalo nell'app.</p>
+    <textarea id="code" class="mono" rows="4" readonly></textarea>
+    <button class="btn primary wide" id="copyBtn">Copia codice</button>
+    <a class="btn wide" id="openBtn" href="#">Apri Scrigno</a>
+  </div>
+</div></div>
+<script src="oauth.js"></script>
+</body>
+</html>

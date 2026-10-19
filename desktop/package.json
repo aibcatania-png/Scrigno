@@ -1,0 +1,45 @@
+{
+  "name": "scrigno",
+  "productName": "Scrigno",
+  "version": "1.0.0",
+  "description": "Password manager con compilazione automatica, passkey e sincronizzazione sul tuo cloud",
+  "author": { "name": "Scrigno", "email": "scrigno@users.noreply.github.com" },
+  "homepage": "https://github.com/",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "app.scrigno.passwords",
+    "productName": "Scrigno",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "autotype.js", "web/**/*", "build/tray.png"],
+    "protocols": [{ "name": "Scrigno", "schemes": ["scrigno"] }],
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": null,
+      "extendInfo": { "NSAppleEventsUsageDescription": "Scrigno digita utente e password nell'app che stai usando (Auto-Type)." }
+    },
+    "dmg": { "title": "Scrigno ${version}" },
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.png" },
+    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "shortcutName": "Scrigno" },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "mimeTypes": ["x-scheme-handler/scrigno"],
+      "synopsis": "Password manager",
+      "maintainer": "Scrigno <scrigno@users.noreply.github.com>"
+    },
+    "deb": { "recommends": ["xdotool"] },
+    "artifactName": "Scrigno-${version}-${os}-${arch}.${ext}"
+  }
+}

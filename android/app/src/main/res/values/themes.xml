@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="scrigno_teal">#0F766E</color>
+    <color name="scrigno_bg">#0C1317</color>
+    <style name="Theme.Scrigno" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/scrigno_teal</item>
+        <item name="colorPrimaryDark">@color/scrigno_teal</item>
+        <item name="colorAccent">@color/scrigno_teal</item>
+        <item name="android:windowBackground">@color/scrigno_bg</item>
+    </style>
+    <style name="Theme.Scrigno.Dialog" parent="Theme.AppCompat.DayNight.Dialog">
+        <item name="colorPrimary">@color/scrigno_teal</item>
+        <item name="colorAccent">@color/scrigno_teal</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+</resources>
