@@ -204,7 +204,13 @@ jobs:
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: Scrigno ${{ env.VERSION }}
-          files: files/*
+          files: |
+            files/*.apk
+            files/*.exe
+            files/*.dmg
+            files/*.AppImage
+            files/*.deb
+            files/*.zip
           make_latest: true
           body: |
             File da scaricare:
