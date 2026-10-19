@@ -117,6 +117,8 @@ jobs:
 
   ios:
     name: iOS
+    # Solo su richiesta manuale (Actions › Build › Run workflow): serve un account Apple Developer.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     env:
       HAS_SIGNING: ${{ secrets.ASC_KEY_ID != '' && secrets.APPLE_TEAM_ID != '' }}

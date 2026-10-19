@@ -5,7 +5,7 @@ Password manager multipiattaforma in stile Enpass: un unico vault cifrato, sincr
 | Piattaforma | Cosa ottieni | Compilazione automatica | Passkey |
 |---|---|---|---|
 | Android 8+ | APK | Servizio di compilazione automatica di Android (app e browser) | Android 14+ (Credential Manager) |
-| iPhone / iPad (iOS 17+) | TestFlight / App Store | Estensione AutoFill (Safari e app, barra QuickType) | Sì, creazione e accesso |
+| iPhone / iPad | Web app installabile da Safari (“Aggiungi a Home”) | — (vedi sotto) | — |
 | Windows | Installer `.exe` | Estensione browser + Auto-Type nelle app (`Ctrl Alt A`) | Nei siti, con l'estensione |
 | macOS | `.dmg` (Apple Silicon e Intel) | Estensione browser + Auto-Type (`⌘ ⌥ A`) | Nei siti, con l'estensione |
 | Linux | `.AppImage` e `.deb` | Estensione browser + Auto-Type (`Ctrl Alt A`) | Nei siti, con l'estensione |
@@ -36,7 +36,7 @@ Le build girano su **GitHub Actions** a ogni push su `main` (workflow `.github/w
 - `android`: test Kotlin + APK
 - `desktop`: installer per Windows, macOS e Linux
 - `extension`: zip per Chrome/Edge e Firefox
-- `ios`: test Swift + compilazione; con le chiavi Apple configurate, archivio firmato inviato a TestFlight
+- `ios`: disattivato di default (si avvia solo a mano); vedi “iPhone e iPad”
 - `pages`: pubblica la web app e la pagina di ritorno per gli accessi ai cloud
 - `release`: con un tag `v1.0.0` crea una release scaricabile con tutti i file
 
@@ -55,6 +55,12 @@ Per iOS crea prima l'app in App Store Connect (I miei app › +) con il bundle I
 ### GitHub Pages
 
 Settings › Pages › Source: **GitHub Actions**. Su un account gratuito Pages funziona solo con repository pubblici. L'indirizzo (es. `https://utente.github.io/scrigno/`) ospita la web app e le pagine `oauth.html` / `oauth-app.html` usate per i login ai cloud.
+
+## iPhone e iPad
+
+Senza un account Apple Developer (a pagamento) un'app non si può installare stabilmente su iPhone, e la compilazione automatica di iOS è riservata alle app installate. Su iPhone e iPad si usa quindi la **web app**: apri l'indirizzo GitHub Pages in Safari › Condividi › *Aggiungi alla schermata Home*. Ha lo stesso vault sincronizzato, la ricerca, la copia di utente e password e i codici 2FA, ma non compila da sola i campi e non gestisce le passkey.
+
+Il codice dell'app iOS (cartella `ios/`) resta nel progetto: se in futuro attivi l'account Apple Developer, basta aggiungere i segreti indicati sopra e avviare il workflow a mano.
 
 ## Configurare i cloud
 
