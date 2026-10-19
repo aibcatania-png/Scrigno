@@ -111,8 +111,14 @@ jobs:
       - run: |
           set -o pipefail
           if [ "$RUNNER_OS" = macOS ]; then
-            # una architettura alla volta: due DMG in parallelo si contendono lo stesso volume
-            { npx electron-builder --mac --arm64 --publish never && npx electron-builder --mac --x64 --publish never; } 2>&1 | tee ../ci.log
+            # l'app viene impacchettata da electron-builder, il DMG creato direttamente con hdiutil
+            npx electron-builder --mac --publish never 2>&1 | tee ../ci.log
+            V=$(node -p "require('./package.json').version")
+            for d in dist/mac-arm64:arm64 dist/mac:x64; do
+              src=${d%%:*}; arch=${d##*:}
+              rm -rf stage && mkdir stage && cp -R "$src/Scrigno.app" stage/ && ln -s /Applications stage/Applications
+              hdiutil create -volname "Scrigno" -srcfolder stage -ov -format UDZO "dist/Scrigno-$V-mac-$arch.dmg" 2>&1 | tee -a ../ci.log
+            done
           else
             npx electron-builder ${{ matrix.flag }} --publish never 2>&1 | tee ../ci.log
           fi
