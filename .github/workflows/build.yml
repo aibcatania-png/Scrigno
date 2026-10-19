@@ -190,13 +190,27 @@ jobs:
 
   release:
     name: Pubblica la release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Ogni build riuscita su main aggiorna la release della versione indicata in scrigno.config.json.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: [extension, android, desktop]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - run: echo "VERSION=$(python3 -c "import json;print(json.load(open('scrigno.config.json'))['version'])")" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with: { path: files, merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Scrigno ${{ env.VERSION }}
           files: files/*
-          generate_release_notes: true
+          make_latest: true
+          body: |
+            File da scaricare:
+            - **Android**: `Scrigno-…-android.apk`
+            - **Windows**: `Scrigno-…-win-x64.exe`
+            - **macOS**: `…-mac-arm64.dmg` (Apple Silicon) o `…-mac-x64.dmg` (Intel)
+            - **Linux**: `.AppImage` oppure `.deb`
+            - **Estensione**: `scrigno-chrome-….zip` (Chrome/Edge) e `scrigno-firefox-….zip`
+            - **iPhone/iPad e web**: https://aibcatania-png.github.io/Scrigno/
