@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
 
 jobs:
   test:
@@ -23,10 +23,11 @@ jobs:
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - run: node tests/core.test.js
-      - run: node tests/ui.test.js
-      - run: python3 tools/build_extension.py
-      - run: node tests/extension.test.js
+      - run: |
+          set -o pipefail
+          { node tests/core.test.js && node tests/ui.test.js && python3 tools/build_extension.py && node tests/extension.test.js; } 2>&1 | tee ci.log
+      - if: failure()
+        run: tools/ci_report.sh ci.log
 
   extension:
     name: Estensione browser
@@ -76,7 +77,11 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: '${{ secrets.ANDROID_KEYSTORE_PASSWORD }}'
           ANDROID_KEY_ALIAS: '${{ secrets.ANDROID_KEY_ALIAS }}'
           SCRIGNO_KT_OUT: '${{ runner.temp }}'
-        run: gradle --no-daemon testReleaseUnitTest assembleRelease
+        run: |
+          set -o pipefail
+          gradle --no-daemon testReleaseUnitTest assembleRelease 2>&1 | tee ../ci.log
+      - if: failure()
+        run: tools/ci_report.sh ci.log 120
       - run: node tests/native-compat.test.js "$RUNNER_TEMP" kt
       - run: |
           mkdir -p out
@@ -103,9 +108,13 @@ jobs:
       - run: rm -rf desktop/web && cp -r web desktop/web
       - run: npm install --no-audit --no-fund
         working-directory: desktop
-      - run: npx electron-builder ${{ matrix.flag }} --publish never
+      - run: |
+          set -o pipefail
+          npx electron-builder ${{ matrix.flag }} --publish never 2>&1 | tee ../ci.log
         working-directory: desktop
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+      - if: failure()
+        run: tools/ci_report.sh ci.log
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
