@@ -4,7 +4,7 @@ import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEAL, WHITE = (15, 118, 110, 255), (255, 255, 255, 255)
+TEAL, WHITE = (31, 120, 204, 255), (255, 255, 255, 255)  # azzurro del marchio
 
 
 def icon(size, pad=0.0, rounded=True, bg=True):

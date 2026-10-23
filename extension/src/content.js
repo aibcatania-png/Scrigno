@@ -88,11 +88,11 @@
       * { box-sizing: border-box; font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
       .menu { position: fixed; min-width: 260px; max-width: 360px; max-height: 320px; overflow-y: auto; background: #fff; color: #13202a;
         border: 1px solid #d6dde2; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 6px; }
-      .head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px; font-weight: 700; color: #0f766e; font-size: 12px; }
+      .head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px; font-weight: 700; color: #1f78cc; font-size: 12px; }
       .head svg { width: 16px; height: 16px; }
       button { all: unset; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
-      button:hover, button.sel { background: #e6f6f3; }
-      .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; background: #0f766e; }
+      button:hover, button.sel { background: #e3f0fc; }
+      .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; background: #1f78cc; }
       .t { display: flex; flex-direction: column; min-width: 0; }
       .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .t small { color: #5d6c78; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -102,10 +102,10 @@
       .bar p { margin: 0; }
       .row { display: flex; gap: 8px; flex-wrap: wrap; }
       .row button { width: auto; padding: 7px 12px; border: 1px solid #d6dde2; font-weight: 600; }
-      .row button.pri { background: #0f766e; color: #fff; border-color: #0f766e; }
+      .row button.pri { background: #1f78cc; color: #fff; border-color: #1f78cc; }
       @media (prefers-color-scheme: dark) {
         .menu, .bar { background: #131c22; color: #e5edf1; border-color: #23323c; }
-        button:hover, button.sel { background: #12403b; }
+        button:hover, button.sel { background: #14304b; }
         .t small, .empty { color: #8fa1ad; }
         .row button { border-color: #23323c; }
       }
@@ -113,7 +113,7 @@
     document.documentElement.append(host);
     return shadow;
   }
-  const LOGO = '<svg viewBox="0 0 32 32"><rect x="1" y="1" width="30" height="30" rx="8" fill="#0f766e"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="#fff"/></svg>';
+  const LOGO = '<svg viewBox="0 0 32 32"><rect x="1" y="1" width="30" height="30" rx="8" fill="#1f78cc"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="#fff"/></svg>';
   const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let menu = null, menuFor = null, menuItems = [], sel = -1;

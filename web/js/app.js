@@ -375,9 +375,9 @@ async function syncNow(silent = false) {
   }
 }
 function syncLabel() {
-  const [i, t] = !hasAnySync() ? ['☁', 'Collega cloud']
-    : ({ busy: ['⟳', 'Sincronizzo…'], ok: ['✓', 'Sincronizzato'], err: ['⚠', 'Errore sync'], idle: ['☁', 'Cloud collegato'] }[S.syncState] || ['☁', 'Cloud']);
-  return `<span>${i}</span><span class="nl"> ${t}</span>`;
+  const [i, t] = !hasAnySync() ? ['cloud', 'Collega cloud']
+    : ({ busy: ['refresh', 'Sincronizzo…'], ok: ['cloudOk', 'Sincronizzato'], err: ['cloudErr', 'Errore di sincronizzazione'], idle: ['cloud', 'Cloud collegato'] }[S.syncState] || ['cloud', 'Cloud']);
+  return `${ic(i, S.syncState === 'busy' ? 'spin' : '')}<span class="nl">${t}</span>`;
 }
 function setSync(st) {
   S.syncState = st;
@@ -404,16 +404,16 @@ function sections() {
   const tags = allTags(items);
   const n = trashedItems().length;
   return [
-    ['all', 'Tutti gli elementi', '🗂️'], ['fav', 'Preferiti', '⭐'],
+    ['all', 'Tutti gli elementi', ic('grid')], ['fav', 'Preferiti', ic('star')],
     ['-h', 'Categorie'],
-    ...typeKeys.map(k => [k, all[k].plural, all[k].icon]),
-    ...(tags.length ? [['-h', 'Tag'], ...tags.map(([t]) => ['tag:' + t, t, '🏷️'])] : []),
+    ...typeKeys.map(k => [k, all[k].plural, typeIc(k, all[k])]),
+    ...(tags.length ? [['-h', 'Tag'], ...tags.map(([t]) => ['tag:' + t, t, ic('tag')])] : []),
     ['-h', 'Strumenti'],
-    ['audit', 'Sicurezza', '🛡️'], ['gen', 'Generatore', '🎲'],
-    ...(n ? [['trash', 'Cestino', '🗑️']] : []),
+    ['audit', 'Sicurezza', ic('shield')], ['gen', 'Generatore', ic('wand')],
+    ...(n ? [['trash', 'Cestino', ic('trash')]] : []),
   ];
 }
-const LOGO = `<svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="8" fill="var(--acc)"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="var(--on-acc)" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="var(--on-acc)"/><circle cx="16" cy="19" r="1.8" fill="var(--acc)"/><rect x="15.2" y="19.6" width="1.6" height="3" rx=".8" fill="var(--acc)"/></svg>`;
+const LOGO = `<svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6cc0ff"/><stop offset="1" stop-color="#1f78cc"/></linearGradient></defs><rect x="2" y="2" width="28" height="28" rx="8" fill="url(#lg)"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="#fff"/><circle cx="16" cy="19" r="1.8" fill="#1f78cc"/><rect x="15.2" y="19.6" width="1.6" height="3" rx=".8" fill="#1f78cc"/></svg>`;
 
 function subtitle(i) {
   const f = i.f || {};
@@ -434,9 +434,10 @@ function subtitle(i) {
   return first ? f[first[0]] : '';
 }
 function hue(s) { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; }
+const TILE = ['#2F80C9', '#3A6EA5', '#2B9BB0', '#5468C4', '#3D8F7A', '#7A5BB8', '#C0703A', '#B5506A', '#4F7A93', '#6B8E3D'];
 function letterIcon(it, big = false) {
   const ch = (it.title || '?').trim().charAt(0).toUpperCase() || '?';
-  return `<span class="ricon${big ? ' big' : ''}" style="background:hsl(${hue(it.title || '')} 45% 42%)">${esc(ch)}</span>`;
+  return `<span class="ricon${big ? ' big' : ''}" style="--tile:${TILE[hue(it.title || '') % TILE.length]}">${esc(ch)}</span>`;
 }
 const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 
@@ -469,7 +470,7 @@ function renderSetup() {
        <button class="btn primary wide" data-act="pick" data-kind="setup">Scegli file…</button>`;
   $('#app').innerHTML = `<div class="center"><div class="card auth">
     <div class="brand big">${LOGO}<span>Scrigno</span></div>
-    <p class="tag">Password, passkey, carte e codici 2FA, cifrati sui tuoi dispositivi.</p>
+    <p class="tagline">Password, passkey, carte e codici 2FA, cifrati sui tuoi dispositivi.</p>
     <div class="tabs">${[['new', 'Nuovo vault'], ['cloud', 'Dal cloud'], ['file', 'Da backup']].map(([k, l]) =>
       `<button class="tab ${tab === k ? 'on' : ''}" data-act="setup-tab" data-k="${k}">${l}</button>`).join('')}</div>
     ${body}</div></div>`;
@@ -480,7 +481,7 @@ function keyfileRow() {
   const rem = rememberedKf();
   if (rem && !S.kf) S.kf = rem;
   return `<div class="kfbox">
-    <span>🗝️ Keyfile: <b id="kfState">${S.kf ? (rem ? 'memorizzato su questo dispositivo' : 'scelto') : 'non scelto'}</b></span>
+    <span class="kfline">${ic('keyfile')} Keyfile: <b id="kfState">${S.kf ? (rem ? 'memorizzato su questo dispositivo' : 'scelto') : 'non scelto'}</b></span>
     <div class="row-btns"><button type="button" class="btn" data-act="pick-kf" data-mode="unlock">Scegli keyfile…</button>
     ${rem ? '<button type="button" class="btn ghost" data-act="forget-kf">Dimentica</button>' : ''}</div>
     ${rem ? '' : '<label class="chk small"><input type="checkbox" id="kfRemember"> Ricorda il keyfile su questo dispositivo</label>'}
@@ -496,7 +497,7 @@ function renderLock() {
       <p class="err" id="unlockErr" hidden></p>
       <button class="btn primary wide" type="submit">Sblocca</button>
     </form>
-    ${S.bio ? '<button class="btn wide" data-act="bio-unlock">👆 Sblocca con biometria</button>' : ''}
+    ${S.bio ? `<button class="btn wide" data-act="bio-unlock">${ic('fingerprint')} Sblocca con la biometria</button>` : ''}
     ${S.pendingSync ? '<p class="hint">Vault scaricato dal cloud: inserisci la sua master password.</p>' : ''}
     ${S.autotype ? '<p class="hint">Sblocca per compilare nell\'app in primo piano.</p>' : ''}
     <button class="link" data-act="wipe">Rimuovi il vault da questo dispositivo</button>
@@ -519,7 +520,7 @@ function countFor(k) {
 }
 
 function vaultPicker() {
-  if (!S.extra.length) return `<div class="vaultname" title="Vault">🗄️ <span class="nl">${esc(vaultName(MAIN))}</span></div>`;
+  if (!S.extra.length) return `<div class="vaultname" title="Vault">${ic('vault')}<span class="nl">${esc(vaultName(MAIN))}</span></div>`;
   const ids = vaultIds();
   return `<select id="vaultSel" class="vaultsel" title="Vault">
     <option value="all" ${S.view.vault === 'all' ? 'selected' : ''}>Tutti i vault</option>
@@ -538,16 +539,16 @@ function renderMain() {
       <nav>${sections().map(([k, l, i]) => k === '-h' ? `<div class="nav-h">${esc(l)}</div>`
         : `<button class="nav-btn ${v.section === k ? 'on' : ''}" data-act="section" data-k="${esc(k)}" title="${esc(l)}"><span class="ni">${i}</span><span class="nl">${esc(l)}</span>${countFor(k)}</button>`).join('')}</nav>
       <div class="nav-foot">
-        <button class="nav-btn ${v.section === 'settings' ? 'on' : ''}" data-act="section" data-k="settings" title="Impostazioni"><span class="ni">⚙️</span><span class="nl">Impostazioni</span></button>
+        <button class="nav-btn ${v.section === 'settings' ? 'on' : ''}" data-act="section" data-k="settings" title="Impostazioni"><span class="ni">${ic('settings')}</span><span class="nl">Impostazioni</span></button>
         <div class="nav-row">
           <button class="sync-pill" id="syncPill" data-act="sync" data-state="${S.syncState}" title="Sincronizzazione">${syncLabel()}</button>
-          <button class="btn ghost" data-act="lock" title="Blocca (Ctrl+L)">🔒<span class="nl"> Blocca</span></button>
+          <button class="btn ghost lockbtn" data-act="lock" title="Blocca (Ctrl+L)">${ic('lock')}</button>
         </div>
       </div>
     </aside>
     ${page ? `<section class="page">${pageHtml}</section>`
       : `<section class="list">
-          <div class="list-head"><input id="q" type="search" placeholder="Cerca in ${esc(sectionTitle())}…" value="${esc(v.q)}" autocomplete="off" title="Cerca (Ctrl+F)">${v.section === 'trash' ? '' : '<button class="btn primary" data-act="new" title="Nuovo elemento (Ctrl+N)">＋</button>'}</div>
+          <div class="list-head"><input id="q" type="search" placeholder="Cerca" value="${esc(v.q)}" autocomplete="off" title="Cerca (Ctrl+F)">${v.section === 'trash' ? '' : `<button class="btn primary addbtn" data-act="new" title="Nuovo elemento (Ctrl+N)">${ic('plus')}<span class="nl">Nuovo</span></button>`}</div>
           <div class="list-sub"><b>${esc(sectionTitle())}</b><span>${visibleItems().length}</span>
             <select id="sortSel" title="Ordina">${[['az', 'Nome A–Z'], ['za', 'Nome Z–A'], ['recent', 'Modificati di recente'], ['created', 'Creati di recente']].map(([k, l]) => `<option value="${k}" ${S.settings.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
           <div id="items">${renderList()}</div>
@@ -587,12 +588,12 @@ function renderList() {
   const items = visibleItems();
   if (!items.length) {
     if (S.view.section === 'trash') return '<p class="empty">Il cestino è vuoto.</p>';
-    return `<p class="empty">${allLive().length ? 'Nessun risultato.' : 'Il vault è vuoto.<br>Premi ＋ per aggiungere il primo elemento, oppure importa da Enpass in Impostazioni.'}</p>`;
+    return `<p class="empty">${allLive().length ? 'Nessun risultato.' : 'Il vault è vuoto.<br>Premi Nuovo per aggiungere il primo elemento, oppure importa da Enpass in Impostazioni.'}</p>`;
   }
   const many = S.extra.length && S.view.vault === 'all';
   return items.map(i => `<button class="row ${S.view.id === i.id ? 'on' : ''}" data-act="open" data-id="${i.id}">
       ${letterIcon(i)}<span class="rtext"><b>${esc(i.title)}</b><small>${esc(subtitle(i))}${many && vaultOf(i.id) !== MAIN ? ' · ' + esc(vaultName(vaultOf(i.id))) : ''}</small></span>
-      ${(i.attachments || []).length ? '<span class="clip" title="Allegati">📎</span>' : ''}${i.fav ? '<span class="star">★</span>' : ''}
+      ${(i.attachments || []).length ? `<span class="clip" title="Allegati">${ic('clip')}</span>` : ''}${i.fav ? `<span class="star" title="Preferito">${ic('starFill')}</span>` : ''}
     </button>`).join('');
 }
 
@@ -600,7 +601,7 @@ function fieldRow(it, k, label, kind, val = getVal(it, k)) {
   if (kind === 'totp') {
     return `<div class="field"><label>${esc(label)}</label><div class="fv">
       <span class="totp" data-totp="${it.id}">··· ···</span><span class="ring" data-ring></span>
-      <button class="icon" data-act="copy-totp" data-id="${it.id}" title="Copia codice">⧉</button></div></div>`;
+      <button class="icon" data-act="copy-totp" data-id="${it.id}" title="Copia codice">${ic('copy')}</button></div></div>`;
   }
   const secret = !!kind && kind.startsWith('secret');
   const multi = kind === 'multi' || kind === 'secret-multi';
@@ -615,8 +616,8 @@ function fieldRow(it, k, label, kind, val = getVal(it, k)) {
   }
   return `<div class="field"><label>${esc(label)}${badge}</label><div class="fv">
     <span class="val ${multi ? 'multi' : ''} ${secret ? 'mono' : ''}">${shown}</span>
-    ${secret ? `<button class="icon" data-act="reveal" data-k="${k}" title="Mostra">👁</button>` : ''}
-    <button class="icon" data-act="copy" data-k="${k}" title="Copia">⧉</button></div></div>`;
+    ${secret ? `<button class="icon" data-act="reveal" data-k="${k}" title="Mostra">${ic('eye')}</button>` : ''}
+    <button class="icon" data-act="copy" data-k="${k}" title="Copia">${ic('copy')}</button></div></div>`;
 }
 
 function historyBlock(it) {
@@ -624,8 +625,8 @@ function historyBlock(it) {
   return `<details class="fields hist"><summary>Password precedenti (${it.history.length})</summary>
     ${it.history.map((h, ix) => `<div class="field"><label>Usata fino al ${fmtDate(h.until)}</label><div class="fv">
       <span class="val mono">••••••••</span>
-      <button class="icon" data-act="reveal-h" data-ix="${ix}" title="Mostra">👁</button>
-      <button class="icon" data-act="copy-h" data-ix="${ix}" title="Copia">⧉</button></div></div>`).join('')}
+      <button class="icon" data-act="reveal-h" data-ix="${ix}" title="Mostra">${ic('eye')}</button>
+      <button class="icon" data-act="copy-h" data-ix="${ix}" title="Copia">${ic('copy')}</button></div></div>`).join('')}
   </details>`;
 }
 
@@ -633,12 +634,12 @@ function attachmentsBlock(list, editable) {
   if (!list.length && !editable) return '';
   return `<div class="fields atts"><div class="field"><label>Allegati</label>
     ${list.map((a, ix) => `<div class="att">
-      ${/^image\//.test(a.type) ? `<img src="data:${esc(a.type)};base64,${a.data}" alt="">` : '<span class="atticon">📄</span>'}
+      ${/^image\//.test(a.type) ? `<img src="data:${esc(a.type)};base64,${a.data}" alt="">` : `<span class="atticon">${ic('file')}</span>`}
       <span class="rtext"><b>${esc(a.name)}</b><small>${fmtSize(a.size || 0)}</small></span>
-      ${editable ? `<button type="button" class="icon" data-act="att-del" data-ix="${ix}" title="Rimuovi">✕</button>`
-        : `<button class="icon" data-act="att-open" data-ix="${ix}" title="Apri">↗</button><button class="icon" data-act="att-save" data-ix="${ix}" title="Scarica">⤓</button>`}
+      ${editable ? `<button type="button" class="icon" data-act="att-del" data-ix="${ix}" title="Rimuovi">${ic('x')}</button>`
+        : `<button class="icon" data-act="att-open" data-ix="${ix}" title="Apri">${ic('open')}</button><button class="icon" data-act="att-save" data-ix="${ix}" title="Scarica">${ic('download')}</button>`}
     </div>`).join('') || '<p class="hint">Nessun allegato.</p>'}
-    ${editable ? '<button type="button" class="btn ghost left" data-act="att-add">📎 Aggiungi allegato</button>' : ''}
+    ${editable ? `<button type="button" class="btn ghost left" data-act="att-add">${ic('clip')} Aggiungi allegato</button>` : ''}
   </div></div>`;
 }
 
@@ -654,18 +655,18 @@ function renderDetail() {
   const custom = (it.custom || []).map((c, ix) => c.value ? fieldRow(it, 'c' + ix, c.label || 'Campo', c.secret ? 'secret' : 'text') : '').join('');
   const vid = vaultOf(it.id);
   if (it.trashed) {
-    return `<div class="dhead"><button class="btn ghost back" data-act="back">‹</button>
+    return `<div class="dhead"><button class="btn ghost back" data-act="back" title="Indietro">${ic('back')}</button>
         <div class="dtitle">${letterIcon(it, true)}<div><h2>${esc(it.title)}</h2><small>Nel cestino dal ${fmtDate(it.trashed)}</small></div></div></div>
       <p class="hint">Gli elementi nel cestino vengono eliminati definitivamente dopo ${TRASH_DAYS} giorni.</p>
       <div class="row-btns"><button class="btn primary" data-act="restore">Ripristina</button><button class="btn danger" data-act="purge">Elimina definitivamente</button></div>
       <div class="fields">${rows + orphan + custom || '<p class="hint">Nessun campo.</p>'}</div>`;
   }
   return `<div class="dhead">
-      <button class="btn ghost back" data-act="back">‹</button>
-      <div class="dtitle">${letterIcon(it, true)}<div><h2>${esc(it.title)}</h2><small>${T.icon} ${esc(T.label)}${S.extra.length ? ' · 🗄️ ' + esc(vaultName(vid)) : ''}</small></div></div>
-      <div class="dactions"><button class="btn ghost" data-act="fav" title="Preferito">${it.fav ? '★' : '☆'}</button><button class="btn" data-act="edit" title="Modifica (Ctrl+E)">Modifica</button></div>
+      <button class="btn ghost back" data-act="back" title="Indietro">${ic('back')}</button>
+      <div class="dtitle">${letterIcon(it, true)}<div><h2>${esc(it.title)}</h2><small class="dmeta">${typeIc(it.type, T)}${esc(T.label)}${S.extra.length ? `<span class="sep"></span>${ic('vault')}${esc(vaultName(vid))}` : ''}</small></div></div>
+      <div class="dactions"><button class="btn ghost favbtn ${it.fav ? 'on' : ''}" data-act="fav" title="${it.fav ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'} (Ctrl+D)">${ic(it.fav ? 'starFill' : 'star')}</button><button class="btn" data-act="edit" title="Modifica (Ctrl+E)">Modifica</button></div>
     </div>
-    ${(it.tags || []).length ? `<div class="tags">${it.tags.map(t => `<button class="tag" data-act="section" data-k="tag:${esc(t)}">🏷️ ${esc(t)}</button>`).join('')}</div>` : ''}
+    ${(it.tags || []).length ? `<div class="tags">${it.tags.map(t => `<button class="tag" data-act="section" data-k="tag:${esc(t)}">${ic('tag')}${esc(t)}</button>`).join('')}</div>` : ''}
     <div class="fields">${rows + orphan + custom || '<p class="hint">Nessun campo compilato.</p>'}</div>
     ${attachmentsBlock(it.attachments || [], false)}
     ${historyBlock(it)}
@@ -681,8 +682,8 @@ function editField(k, label, kind, val = '') {
   const isPw = k === 'password';
   return `<label class="lbl">${esc(label)}<span class="inrow">
       <input name="f_${k}" type="${kind === 'secret' ? 'password' : 'text'}" value="${esc(val)}" autocomplete="${isPw ? 'new-password' : 'off'}" spellcheck="false" ${kind === 'url' ? 'inputmode="url"' : ''}${kind === 'totp' ? ' placeholder="JBSW Y3DP… oppure otpauth://…"' : ''}>
-      ${kind === 'secret' ? '<button type="button" class="icon" data-act="toggle-input" title="Mostra">👁</button>' : ''}
-      ${isPw ? '<button type="button" class="icon" data-act="gen-into" title="Genera password">🎲</button>' : ''}
+      ${kind === 'secret' ? `<button type="button" class="icon" data-act="toggle-input" title="Mostra">${ic('eye')}</button>` : ''}
+      ${isPw ? `<button type="button" class="icon" data-act="gen-into" title="Genera password">${ic('wand')}</button>` : ''}
     </span>${isPw ? meterHTML() : ''}</label>`;
 }
 function customRow(c = { label: '', value: '', secret: false }) {
@@ -690,7 +691,7 @@ function customRow(c = { label: '', value: '', secret: false }) {
     <input data-c="label" placeholder="Etichetta" value="${esc(c.label)}" autocomplete="off">
     <input data-c="value" placeholder="Valore" type="${c.secret ? 'password' : 'text'}" value="${esc(c.value)}" autocomplete="off">
     <label class="chk small"><input type="checkbox" data-c="secret" ${c.secret ? 'checked' : ''}> Segreto</label>
-    <button type="button" class="icon" data-act="del-custom" title="Rimuovi">✕</button></div>`;
+    <button type="button" class="icon" data-act="del-custom" title="Rimuovi">${ic('x')}</button></div>`;
 }
 function renderEdit() {
   const v = S.view;
@@ -698,21 +699,21 @@ function renderEdit() {
   const type = it ? it.type : v.newType;
   const all = types();
   if (!type) {
-    return `<div class="dhead"><button class="btn ghost" data-act="cancel">‹ Annulla</button><h2>Nuovo elemento</h2><span></span></div>
-      <div class="typegrid">${Object.entries(all).filter(([k]) => k !== 'passkey').map(([k, t]) => `<button class="typecard" data-act="newtype" data-k="${esc(k)}"><span>${t.icon}</span>${esc(t.label)}</button>`).join('')}
-        <button class="typecard dashed" data-act="tpl-new"><span>＋</span>Nuovo modello</button></div>
+    return `<div class="dhead"><button class="btn ghost" data-act="cancel">${ic('back')} Annulla</button><h2>Nuovo elemento</h2><span></span></div>
+      <div class="typegrid">${Object.entries(all).filter(([k]) => k !== 'passkey').map(([k, t]) => `<button class="typecard" data-act="newtype" data-k="${esc(k)}"><span class="tci">${typeIc(k, t)}</span>${esc(t.label)}</button>`).join('')}
+        <button class="typecard dashed" data-act="tpl-new"><span class="tci">${ic('plus')}</span>Nuovo modello</button></div>
       <p class="hint">Le passkey si creano da sole quando un sito o un'app te ne propone una e scegli Scrigno.</p>`;
   }
   const T = all[type] || typeOf({ type });
   const f = it ? it.f : {};
   const curVault = it ? vaultOf(it.id) : (S.view.vault !== 'all' ? S.view.vault : MAIN);
   return `<form id="editForm" class="edit stack" data-type="${esc(type)}" autocomplete="off">
-    <div class="dhead"><button type="button" class="btn ghost" data-act="cancel">‹ Annulla</button><h2>${T.icon} ${it ? 'Modifica' : 'Nuovo'}</h2><button class="btn primary" type="submit" title="Salva (Ctrl+S)">Salva</button></div>
+    <div class="dhead"><button type="button" class="btn ghost" data-act="cancel">${ic('back')} Annulla</button><h2 class="eh">${typeIc(type, T)}${it ? 'Modifica' : 'Nuovo'} · ${esc(T.label)}</h2><button class="btn primary" type="submit" title="Salva (Ctrl+S)">Salva</button></div>
     <label class="lbl">Titolo<input name="title" required value="${esc(it ? it.title : '')}" autocomplete="off"></label>
     ${S.extra.length ? `<label class="lbl">Vault<select name="vault">${vaultIds().map(id => `<option value="${id}" ${id === curVault ? 'selected' : ''}>${esc(vaultName(id))}</option>`).join('')}</select></label>` : ''}
     ${T.fields.map(([k, l, kind]) => editField(k, l, kind, f[k])).join('')}
     <div class="custom" id="customList">${(it ? it.custom || [] : []).map(customRow).join('')}</div>
-    <button type="button" class="btn ghost left" data-act="add-custom">＋ Campo personalizzato</button>
+    <button type="button" class="btn ghost left" data-act="add-custom">${ic('plus')} Campo personalizzato</button>
     <div id="attList">${attachmentsBlock(S.editAtt, true)}</div>
     <label class="lbl">Tag (separati da virgola)<input name="tags" list="tagList" value="${esc((it ? it.tags || [] : S.view.section.startsWith('tag:') ? [S.view.section.slice(4)] : []).join(', '))}" autocomplete="off" placeholder="Es. lavoro, banca">
       <datalist id="tagList">${allTags(allLive()).map(([t]) => `<option value="${esc(t)}">`).join('')}</datalist></label>
@@ -782,7 +783,7 @@ function renderTemplateEditor() {
         <label class="lbl" style="flex:1">Nome del modello<input name="title" required value="${esc(t.title)}" placeholder="Es. Tessera palestra"></label></div>
       <p class="hint">Campi del modello:</p>
       <div id="tplFields">${t.fields.map(tplRow).join('')}</div>
-      <button type="button" class="btn ghost left" data-act="tpl-add-field">＋ Campo</button>
+      <button type="button" class="btn ghost left" data-act="tpl-add-field">${ic('plus')} Campo</button>
       <div class="row-btns"><button class="btn primary" type="submit">Salva modello</button>
         <button type="button" class="btn ghost" data-act="section" data-k="settings">Annulla</button>
         ${t.id ? '<button type="button" class="btn danger" data-act="tpl-del">Elimina modello</button>' : ''}</div>
@@ -792,7 +793,7 @@ function tplRow([k, label, kind] = ['f' + b64u.to(rand(4)), '', 'text']) {
   return `<div class="crow tplrow" data-key="${esc(k)}">
     <input data-t="label" placeholder="Nome del campo" value="${esc(label)}">
     <select data-t="kind">${Object.entries(FIELD_KINDS).map(([v, l]) => `<option value="${v}" ${v === (kind || 'text') ? 'selected' : ''}>${l}</option>`).join('')}</select>
-    <button type="button" class="icon" data-act="tpl-del-field" title="Rimuovi">✕</button></div>`;
+    <button type="button" class="icon" data-act="tpl-del-field" title="Rimuovi">${ic('x')}</button></div>`;
 }
 async function saveTemplate(form) {
   const fields = $$('.tplrow', form).map(r => [r.dataset.key, r.querySelector('[data-t=label]').value.trim(), r.querySelector('[data-t=kind]').value]).filter(x => x[1]);
@@ -978,15 +979,15 @@ function autofillCard() {
 
 function vaultsCard() {
   const rows = [`<div class="vrow"><span class="rtext"><b>${esc(vaultName(MAIN))}</b><small>Vault principale · ${S.items.filter(isActive).length} elementi${S.sync ? ' · ' + PROVIDERS[S.sync.provider].name : ''}</small></span>
-      <button class="icon" data-act="vault-rename" data-id="${MAIN}" title="Rinomina">✎</button></div>`,
+      <button class="icon" data-act="vault-rename" data-id="${MAIN}" title="Rinomina">${ic('edit')}</button></div>`,
     ...S.extra.map(v => `<div class="vrow"><span class="rtext"><b>${esc(v.name)}</b><small>${v.file ? v.items.filter(isActive).length + ' elementi' : 'non ancora scaricato su questo dispositivo'}${v.cfg ? ' · ' + PROVIDERS[v.cfg.provider].name : ' · solo su questo dispositivo'}${v.err ? ' · ⚠ ' + esc(v.err) : ''}</small></span>
-      <button class="icon" data-act="vault-rename" data-id="${v.id}" title="Rinomina">✎</button>
-      <button class="icon" data-act="vault-export" data-id="${v.id}" title="Esporta backup">⤓</button>
-      <button class="icon" data-act="vault-remove" data-id="${v.id}" title="Rimuovi">✕</button></div>`)];
+      <button class="icon" data-act="vault-rename" data-id="${v.id}" title="Rinomina">${ic('edit')}</button>
+      <button class="icon" data-act="vault-export" data-id="${v.id}" title="Esporta backup">${ic('download')}</button>
+      <button class="icon" data-act="vault-remove" data-id="${v.id}" title="Rimuovi">${ic('x')}</button></div>`)];
   return `<div class="card stack"><h3>Vault</h3>
     <p class="hint">Tieni separati, per esempio, Personale e Lavoro. Sbloccando il vault principale si aprono anche gli altri; ognuno ha la sua password e può stare su un cloud diverso.</p>
     <div class="vlist">${rows.join('')}</div>
-    <details><summary class="btn ghost left">＋ Nuovo vault</summary>
+    <details><summary class="btn ghost left">${ic('plus')} Nuovo vault</summary>
       <form id="newVaultForm" class="stack" style="margin-top:10px">
         <label class="lbl">Nome<input name="name" required placeholder="Es. Lavoro"></label>
         <label class="lbl">Password del vault<input name="pw" type="password" required minlength="10" autocomplete="new-password">${meterHTML()}</label>
@@ -1004,8 +1005,8 @@ function templatesCard() {
   return `<div class="card stack"><h3>Modelli personalizzati</h3>
     <p class="hint">Crea categorie con i campi che ti servono (tessere, assicurazioni, codici…). Oltre ai modelli già pronti: Wi-Fi, conto bancario, documento, licenza, server, account email.</p>
     ${list.map(t => `<div class="vrow"><span class="rtext"><b>${esc((t.f.icon || '📁') + ' ' + t.title)}</b><small>${(() => { try { return JSON.parse(t.f.fields).length; } catch { return 0; } })()} campi</small></span>
-      <button class="icon" data-act="tpl-edit" data-id="${t.id}" title="Modifica">✎</button></div>`).join('')}
-    <button class="btn left" data-act="tpl-new">＋ Nuovo modello</button></div>`;
+      <button class="icon" data-act="tpl-edit" data-id="${t.id}" title="Modifica">${ic('edit')}</button></div>`).join('')}
+    <button class="btn left" data-act="tpl-new">${ic('plus')} Nuovo modello</button></div>`;
 }
 
 function keyfileCard() {
