@@ -192,3 +192,19 @@ input[type=range] { padding: 0; accent-color: var(--acc); border: 0; background:
 /* --- Auto-Type --- */
 .dlg.wide { width: min(520px, 94vw); }
 .atlist { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+
+/* --- più vault, allegati, cestino, modelli, keyfile --- */
+.vaultsel { width: auto; max-width: 42%; padding: 8px; font-size: 14px; }
+.clip { font-size: 13px; opacity: .7; }
+.atts .att { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.atts .att img { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.atticon { width: 44px; text-align: center; font-size: 26px; }
+.atts .field > label { margin-bottom: 6px; }
+details.hist summary { padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+.vlist { display: flex; flex-direction: column; gap: 2px; }
+.vrow { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--panel2); }
+details > summary.btn { list-style: none; display: inline-block; }
+details > summary.btn::-webkit-details-marker { display: none; }
+.kfbox { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; font-size: 14px; }
+.typecard.dashed { border-style: dashed; color: var(--muted); }
+.tplrow { grid-template-columns: 1fr auto auto; }

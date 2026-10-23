@@ -198,7 +198,9 @@ final class WebHost: UIViewController, WKScriptMessageHandlerWithReply, WKUIDele
             if sec > 0 { opts[.expirationDate] = Date().addingTimeInterval(TimeInterval(sec)) }
             UIPasteboard.general.setItems([[UTType.plainText.identifier: text]], options: opts)
             return "null"
-        case "saveFile": return json(try await saveFile(name: a["name"] as? String ?? "scrigno-backup.json", text: a["text"] as? String ?? ""))
+        case "saveFile":
+            let data = (a["b64"] as? String).flatMap { B64.dec($0) } ?? Data((a["text"] as? String ?? "").utf8)
+            return json(try await saveFile(name: a["name"] as? String ?? "scrigno-backup.json", data: data))
         case "openUrl":
             if let u = URL(string: a["url"] as? String ?? ""), u.scheme == "https" || u.scheme == "http" { await UIApplication.shared.open(u) }
             return "null"
@@ -253,9 +255,9 @@ final class WebHost: UIViewController, WKScriptMessageHandlerWithReply, WKUIDele
     }
 
     @MainActor
-    private func saveFile(name: String, text: String) async throws -> Bool {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        try Data(text.utf8).write(to: url, options: .atomic)
+    private func saveFile(name: String, data: Data) async throws -> Bool {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent((name as NSString).lastPathComponent)
+        try data.write(to: url, options: .atomic)
         defer { try? FileManager.default.removeItem(at: url) }
         let picked = await pick(UIDocumentPickerViewController(forExporting: [url], asCopy: true))
         return picked != nil

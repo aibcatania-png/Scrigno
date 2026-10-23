@@ -14,6 +14,17 @@ Password manager multipiattaforma in stile Enpass: un unico vault cifrato, sincr
 
 Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Drive** (iCloud su iPhone, iPad e Mac; su Windows e Linux puoi usare anche la cartella sincronizzata di OneDrive o Dropbox).
 
+## Funzioni
+
+- **Più vault** (es. Personale e Lavoro): ognuno con la sua password e il suo file sul cloud; sbloccando il principale si aprono tutti.
+- **Allegati cifrati** (fino a 5 MB l'uno): foto di documenti, PDF, ricevute.
+- **Modelli**: login, carte, identità, note, Wi-Fi, conti bancari, documenti, licenze, server, account email, più i **modelli personalizzati** con i campi che vuoi.
+- **Controllo sicurezza**: password deboli, riutilizzate, vecchie e **trovate in violazioni di dati** (Have I Been Pwned, in forma anonima).
+- **Monitoraggio 2FA e passkey**: indica i tuoi siti che offrono la verifica in due passaggi o le passkey e che non stai ancora usando (elenchi di 2fa.directory).
+- **Keyfile**: un file da tenere su chiavetta o telefono, richiesto oltre alla master password.
+- **Cestino** (30 giorni) e **cronologia delle password**.
+- Codici 2FA integrati, generatore di password, importazione da Enpass/CSV, sblocco biometrico.
+
 ## Come è fatto
 
 ```
@@ -38,7 +49,7 @@ Le build girano su **GitHub Actions** a ogni push su `main` (workflow `.github/w
 - `extension`: zip per Chrome/Edge e Firefox
 - `ios`: disattivato di default (si avvia solo a mano); vedi “iPhone e iPad”
 - `pages`: pubblica la web app e la pagina di ritorno per gli accessi ai cloud
-- `release`: con un tag `v1.0.0` crea una release scaricabile con tutti i file
+- `release`: ogni build riuscita su `main` aggiorna la release della versione indicata in `scrigno.config.json`
 
 I file si scaricano dalla pagina della singola esecuzione (Actions › esecuzione › Artifacts) o dalla release.
 

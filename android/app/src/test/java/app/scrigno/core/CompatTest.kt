@@ -53,6 +53,19 @@ class CompatTest {
         assertEquals("HmacSHA256", p.algorithm)
     }
 
+    @Test fun hiddenAndTrashed() {
+        val arr = JSONArray()
+        arr.put(Vault.newItem("login", "A", JSONObject().put("url", "a.it")))
+        arr.put(Vault.newItem("login", "B", JSONObject().put("url", "a.it")).put("trashed", 1L))
+        arr.put(Vault.newItem("_vaultkey", "Lavoro", JSONObject().put("vaultId", "abc").put("dek", "AAAA")))
+        assertEquals(1, Vault.items(arr).size)
+        assertEquals(listOf("abc" to "AAAA"), Vault.extraVaultKeys(arr))
+        val kf = JSONObject().put("kdf", JSONObject().put("keyfile", true).put("salt", "AA==").put("iter", 1))
+        var thrown = false
+        try { VaultCrypto.unlock(kf, "x") } catch (e: KeyfileRequiredException) { thrown = true }
+        assertTrue(thrown)
+    }
+
     @Test fun matching() {
         assertEquals("b.co.uk", Vault.baseDomain("a.b.co.uk"))
         assertEquals("google.com", Vault.baseDomain("www.accounts.google.com"))

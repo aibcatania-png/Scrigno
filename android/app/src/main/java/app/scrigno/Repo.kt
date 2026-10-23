@@ -33,9 +33,18 @@ object Repo {
 
     fun vault(ctx: Context): JSONObject? = get(ctx, "vault")?.let { JSONObject(it) }
 
+    /** Elementi di tutti i vault: il principale e quelli aggiuntivi (le loro chiavi sono nel principale). */
     @Synchronized fun items(ctx: Context, dek: ByteArray): List<JSONObject> {
         val f = vault(ctx) ?: return emptyList()
-        return Vault.items(VaultCrypto.readItems(f, dek))
+        val arr = VaultCrypto.readItems(f, dek)
+        val out = Vault.items(arr).toMutableList()
+        for ((id, key) in Vault.extraVaultKeys(arr)) {
+            try {
+                val xf = get(ctx, "vault-$id")?.let { JSONObject(it) } ?: continue
+                out += Vault.items(VaultCrypto.readItems(xf, app.scrigno.core.B64.dec(key)))
+            } catch (_: Exception) { }
+        }
+        return out
     }
 
     /** Legge, modifica e riscrive il vault in un'unica operazione. */

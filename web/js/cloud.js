@@ -17,6 +17,7 @@ async function pkcePair() {
   return { verifier, challenge };
 }
 const oauthState = () => 'scrigno-' + b64u.to(rand(12));
+const fileOf = c => c.fileName || FILE_NAME;
 
 async function tokenRequest(url, params, label) {
   const r = await Cloud.env.fetch(url, { method: 'POST', body: new URLSearchParams(params) });
@@ -77,7 +78,7 @@ const Dropbox = {
   },
   async download(c) {
     const r = await Cloud.env.fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: {
-      Authorization: 'Bearer ' + await this.token(c), 'Dropbox-API-Arg': JSON.stringify({ path: '/' + FILE_NAME }) } });
+      Authorization: 'Bearer ' + await this.token(c), 'Dropbox-API-Arg': JSON.stringify({ path: '/' + fileOf(c) }) } });
     if (r.status === 409) return null;
     if (!r.ok) throw new Error('Dropbox: errore ' + r.status);
     return r.json();
@@ -85,14 +86,14 @@ const Dropbox = {
   async upload(c, file) {
     const r = await Cloud.env.fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: {
       Authorization: 'Bearer ' + await this.token(c), 'Content-Type': 'application/octet-stream',
-      'Dropbox-API-Arg': JSON.stringify({ path: '/' + FILE_NAME, mode: 'overwrite', mute: true }) }, body: JSON.stringify(file) });
+      'Dropbox-API-Arg': JSON.stringify({ path: '/' + fileOf(c), mode: 'overwrite', mute: true }) }, body: JSON.stringify(file) });
     if (!r.ok) throw new Error('Dropbox: salvataggio non riuscito (' + r.status + ')');
   },
 };
 
 const MS_AUTH = 'https://login.microsoftonline.com/common/oauth2/v2.0';
 const MS_SCOPE = 'Files.ReadWrite.AppFolder offline_access';
-const MS_FILE = `https://graph.microsoft.com/v1.0/me/drive/special/approot:/${FILE_NAME}:/content`;
+const MS_FILE = c => `https://graph.microsoft.com/v1.0/me/drive/special/approot:/${encodeURIComponent(fileOf(c))}:/content`;
 const OneDrive = {
   name: 'OneDrive',
   async connect(cfg, h) {
@@ -118,13 +119,13 @@ const OneDrive = {
     return c.access;
   },
   async download(c) {
-    const r = await Cloud.env.fetch(MS_FILE, { headers: { Authorization: 'Bearer ' + await this.token(c) }, cache: 'no-store' });
+    const r = await Cloud.env.fetch(MS_FILE(c), { headers: { Authorization: 'Bearer ' + await this.token(c) }, cache: 'no-store' });
     if (r.status === 404) return null;
     if (!r.ok) throw new Error('OneDrive: errore ' + r.status);
     return r.json();
   },
   async upload(c, file) {
-    const r = await Cloud.env.fetch(MS_FILE, { method: 'PUT', headers: { Authorization: 'Bearer ' + await this.token(c), 'Content-Type': 'text/plain' }, body: JSON.stringify(file) });
+    const r = await Cloud.env.fetch(MS_FILE(c), { method: 'PUT', headers: { Authorization: 'Bearer ' + await this.token(c), 'Content-Type': 'text/plain' }, body: JSON.stringify(file) });
     if (!r.ok) throw new Error('OneDrive: salvataggio non riuscito (' + r.status + ')');
   },
 };
@@ -152,7 +153,7 @@ const GDrive = {
   async fileId(c) {
     if (c.fileId) return c.fileId;
     const r = await this.api(c, 'https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({
-      spaces: 'appDataFolder', q: `name='${FILE_NAME}'`, fields: 'files(id)' }));
+      spaces: 'appDataFolder', q: `name='${fileOf(c)}'`, fields: 'files(id)' }));
     const j = await r.json();
     return (c.fileId = (j.files && j.files[0] && j.files[0].id) || null);
   },
@@ -171,7 +172,7 @@ const GDrive = {
       return;
     }
     const b = 'scrigno' + b64u.to(rand(9));
-    const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] })}` +
+    const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: fileOf(c), parents: ['appDataFolder'] })}` +
       `\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(file)}\r\n--${b}--`;
     const r = await this.api(c, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
       { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
@@ -188,10 +189,10 @@ const Folder = {
     return { provider: 'folder', folder: f.id, label: f.label };
   },
   async download(c) {
-    const t = await Native.call('folderRead', { id: c.folder, name: FILE_NAME });
+    const t = await Native.call('folderRead', { id: c.folder, name: fileOf(c) });
     return t ? JSON.parse(t) : null;
   },
-  async upload(c, file) { await Native.call('folderWrite', { id: c.folder, name: FILE_NAME, text: JSON.stringify(file) }); },
+  async upload(c, file) { await Native.call('folderWrite', { id: c.folder, name: fileOf(c), text: JSON.stringify(file) }); },
 };
 
 const PROVIDERS = { dropbox: Dropbox, onedrive: OneDrive, gdrive: GDrive, webdav: WebDAV, folder: Folder };
@@ -220,4 +221,13 @@ async function cloudSync(ctx) {
   if (m.changedLocal || m.updateOther) await vaultWrite(ctx.file, ctx.dek, m.items);
   if (m.updateOther) await P.upload(ctx.cfg, ctx.file);
   return { items: m.items, changedLocal: m.changedLocal, uploaded: m.updateOther };
+}
+
+// Configurazione cloud per un altro file sullo stesso servizio (vault aggiuntivi).
+function cloudCfgForFile(cfg, fileName) {
+  const c = clone(cfg);
+  delete c.fileId; delete c.lastSync;
+  c.fileName = fileName;
+  if (c.provider === 'webdav') c.url = c.url.replace(/[^/]*$/, fileName);
+  return c;
 }

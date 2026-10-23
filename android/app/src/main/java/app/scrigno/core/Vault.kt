@@ -12,8 +12,17 @@ object Vault {
 
     fun now() = System.currentTimeMillis()
 
+    /** Elementi attivi: esclusi eliminati, cestino ed elementi interni (tipo che inizia con "_"). */
     fun items(arr: JSONArray): List<JSONObject> =
-        (0 until arr.length()).map { arr.getJSONObject(it) }.filter { !it.optBoolean("deleted") }
+        (0 until arr.length()).map { arr.getJSONObject(it) }
+            .filter { !it.optBoolean("deleted") && !it.has("trashed") && !it.optString("type").startsWith("_") }
+
+    /** Chiavi dei vault aggiuntivi conservate nel vault principale: (id del file, chiave). */
+    fun extraVaultKeys(arr: JSONArray): List<Pair<String, String>> =
+        (0 until arr.length()).map { arr.getJSONObject(it) }
+            .filter { !it.optBoolean("deleted") && it.optString("type") == "_vaultkey" }
+            .mapNotNull { k -> val f = k.optJSONObject("f") ?: return@mapNotNull null; f.optString("vaultId") to f.optString("dek") }
+            .filter { it.first.isNotEmpty() && it.second.isNotEmpty() }
 
     fun field(it: JSONObject, k: String): String = it.optJSONObject("f")?.optString(k, "") ?: ""
 

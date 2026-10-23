@@ -1,8 +1,9 @@
 const load = require('./load');
 let fails = 0;
+const __kv_has_kf = f => !!(f.kdf && f.kdf.keyfile);
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 (async () => {
-  const { ctx, R } = load(['web/js/core.js', 'web/js/native.js', 'web/js/cloud.js', 'web/js/passkey.js']);
+  const { ctx, R } = load(['web/js/core.js', 'web/js/native.js', 'web/js/cloud.js', 'web/js/passkey.js', 'web/js/vaults.js']);
   // TOTP RFC 6238
   ctx.__sec = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
   for (const [t, exp] of [[59, '94287082'], [1111111109, '07081804'], [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130']])
@@ -80,6 +81,49 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   ok(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, raw, data), 'firma passkey verificata');
   const rpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('example.com')));
   ok(as.authenticatorData.slice(0, 32).every((b, i) => b === rpHash[i]) && as.authenticatorData[32] === 0x1d, 'authenticatorData asserzione');
+  // keyfile
+  ctx.__kfa = await R(`keyfileHash(new TextEncoder().encode('keyfile A'))`);
+  ctx.__kfb = await R(`keyfileHash(new TextEncoder().encode('keyfile B'))`);
+  const kv = await R(`vaultCreate('frase-kf-lunga-1', __kfa)`); ctx.__kv = kv;
+  ok(kv.file.kdf.keyfile === true, 'keyfile: flag nel file');
+  let e1 = null; try { await R(`vaultUnlock(__kv.file, 'frase-kf-lunga-1')`); } catch (e) { e1 = e.code; } ok(e1 === 'keyfile', 'keyfile: richiesto');
+  let e2 = false; try { await R(`vaultUnlock(__kv.file, 'frase-kf-lunga-1', __kfb)`); } catch { e2 = true; } ok(e2, 'keyfile: sbagliato rifiutato');
+  ok(!!(await R(`vaultUnlock(__kv.file, 'frase-kf-lunga-1', __kfa)`)), 'keyfile: corretto accettato');
+  await R(`vaultChangePassword(__kv.file, __kv.dek, 'frase-kf-lunga-1', 'frase-kf-lunga-1', __kfa, null)`);
+  ok(!__kv_has_kf(kv.file) && !!(await R(`vaultUnlock(__kv.file, 'frase-kf-lunga-1')`)), 'keyfile: disattivato');
+  // cestino e cronologia
+  R(`__t=[makeItem('login','A',{password:'x'}), makeItem('login','B',{password:'y'})]; trashItem(__t[0]); __t[0].trashed = now() - 31*864e5`);
+  ok(R(`purgeTrash(__t)`) && R(`__t[0].deleted && !__t[1].deleted`), 'cestino: svuotato dopo 30 giorni');
+  ok(R(`matchLogins([trashItem(makeItem('login','C',{url:'c.it'}))],{host:'c.it'}).length`) === 0, 'cestino: esclusi dalla compilazione');
+  const h = R(`(()=>{const o=makeItem('login','H',{password:'old1'}); const n={...o,f:{password:'new1'}}; return withHistory(o,n);})()`);
+  ok(h.history.length === 1 && h.history[0].password === 'old1', 'cronologia password');
+  // modelli
+  R(`__tp=[makeItem('_template','Palestra',{icon:'🏋️',fields:JSON.stringify([['n','Numero tessera','secret'],['s','Scadenza','text']])})]`);
+  const at = R(`allTypes(__tp)`);
+  const tk = Object.keys(at).find(k => k.startsWith('tpl:'));
+  ok(tk && at[tk].label === 'Palestra' && at[tk].fields[0][2] === 'secret' && at[tk].fields[1][2] === undefined && at.wifi, 'modelli personalizzati e predefiniti');
+  ok(!R(`isActive(__tp[0])`), 'modelli nascosti dagli elenchi');
+  // più vault
+  const xv = await R(`createExtraVault({ name: 'Lavoro', password: 'frase-lavoro-lunga', cloudCfg: { provider: 'webdav', url: 'https://x/dav/scrigno-vault.json', user: 'u', pass: 'p' } })`);
+  ctx.__xv = xv;
+  ok(xv.cfg.url.endsWith(`scrigno-${xv.id}.json`) && xv.key.type === '_vaultkey', 'vault aggiuntivo: config cloud su file separato');
+  R(`__xv.items.push(makeItem('login','Intranet',{username:'me',url:'intra.net'}))`);
+  await R(`idb.set(vaultFileKey(__xv.id), __xv.file)`);
+  await R(`saveExtraVault(idb, __xv)`);
+  const op = await R(`openExtraVault(idb, __xv.key)`);
+  ok(op.items.length === 1 && op.items[0].title === 'Intranet' && op.name === 'Lavoro', 'vault aggiuntivo: riaperto con la chiave del principale');
+  ok(!!(await R(`vaultUnlock(__xv.file, 'frase-lavoro-lunga')`)), 'vault aggiuntivo: apribile anche con la sua password');
+  ok(R(`cloudCfgForFile({provider:'dropbox',fileId:'x',appKey:'k'},'a.json')`).fileName === 'a.json', 'cloud: nome file per vault');
+  // violazioni (Have I Been Pwned, finto)
+  const fakeFetch = async url => ({ ok: true, text: async () => url.endsWith('/5BAA6') ? '1E4C9B93F3F0682250B6CF8331B7EE68FD7:3\r\n1E4C9B93F3F0682250B6CF8331B7EE68FD8:9545824' : '' });
+  ctx.__ff = fakeFetch;
+  ok(await R(`pwnedCount('password', __ff)`) === 9545824, 'violazioni: password trovata');
+  ok(await R(`pwnedCount('Zx9!unica-password-ok', __ff)`) === 0, 'violazioni: password non trovata');
+  // elenchi 2FA/passkey (finti)
+  ctx.__df = async url => ({ ok: true, json: async () => url.includes('totp') ? [['Google', { domain: 'google.com', 'additional-domains': ['youtube.com'], documentation: 'https://g/doc' }]] : { 'github.com': { passwordless: 'allowed' } } });
+  ctx.__dc = new Map();
+  const dirs = await R(`loadDirectories(__df, { get: async k => __dc.get(k), set: async (k, v) => __dc.set(k, v) })`);
+  ok(dirs.tfa['youtube.com'][0] === 'Google' && 'github.com' in dirs.pk, 'elenchi 2fa.directory');
   // fixture per i test nativi (Kotlin/Swift): vault con password nota + passkey
   const fx = await R(`(async()=>{const v=await vaultCreate('fixture-password-123'); const it=[makeItem('login','Example',{username:'alice',password:'s3cret!',url:'https://example.com'}), makeItem('passkey','example.com',__pk.fields)]; await vaultWrite(v.file,v.dek,it); return {file:v.file, dek: await exportDEK(v.dek), passkeySpki: toB64(__pk.publicKey), passkeyRpId: 'example.com'};})()`);
   require('fs').writeFileSync(require('path').join(__dirname, 'fixture-vault.json'), JSON.stringify(fx, null, 1));

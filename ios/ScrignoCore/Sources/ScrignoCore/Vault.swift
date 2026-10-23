@@ -6,7 +6,9 @@ enum Vault {
 
     static func nowMs() -> NSNumber { NSNumber(value: Int64(Date().timeIntervalSince1970 * 1000)) }
 
-    static func live(_ items: [JSON]) -> [JSON] { items.filter { ($0["deleted"] as? Bool) != true } }
+    static func live(_ items: [JSON]) -> [JSON] {
+        items.filter { ($0["deleted"] as? Bool) != true && $0["trashed"] == nil && !type($0).hasPrefix("_") }
+    }
 
     static func field(_ it: JSON, _ k: String) -> String { ((it["f"] as? JSON)?[k] as? String) ?? "" }
     static func id(_ it: JSON) -> String { it["id"] as? String ?? "" }

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from configure import load  # noqa: E402
 
 SRC = os.path.join(ROOT, 'extension', 'src')
-SHARED = ['core.js', 'cloud.js', 'passkey.js']
+SHARED = ['core.js', 'cloud.js', 'vaults.js', 'passkey.js']
 BG = SHARED + ['bg.js']
 
 

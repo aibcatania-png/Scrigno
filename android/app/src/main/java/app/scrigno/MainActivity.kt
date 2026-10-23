@@ -44,19 +44,19 @@ class MainActivity : AppCompatActivity() {
     private val bio by lazy { Bio(this) }
     private var oauthId: Int? = null
     private var fileCb: ValueCallback<Array<Uri>>? = null
-    private var pendingSave: Pair<Int, String>? = null
+    private var pendingSave: Pair<Int, ByteArray>? = null
     private var clipClear: Runnable? = null
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fileCb?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
         fileCb = null
     }
-    private val createDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    private val createDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
         val p = pendingSave ?: return@registerForActivityResult
         pendingSave = null
         if (uri == null) { reply(p.first, true, "false"); return@registerForActivityResult }
         try {
-            contentResolver.openOutputStream(uri)!!.use { it.write(p.second.toByteArray()) }
+            contentResolver.openOutputStream(uri)!!.use { it.write(p.second) }
             reply(p.first, true, "true")
         } catch (e: Exception) { reply(p.first, false, err(e)) }
     }
@@ -195,7 +195,8 @@ class MainActivity : AppCompatActivity() {
                 ok(id)
             }
             "saveFile" -> main.post {
-                pendingSave = id to a.getString("text")
+                val bytes = if (a.has("b64")) B64.dec(a.getString("b64")) else a.getString("text").toByteArray()
+                pendingSave = id to bytes
                 createDoc.launch(a.optString("name", "scrigno-backup.json"))
             }
             "openUrl" -> main.post { openExternal(Uri.parse(a.getString("url"))); ok(id) }

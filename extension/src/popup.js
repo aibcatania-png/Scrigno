@@ -23,6 +23,18 @@ function toast(m, ms = 2200) {
 }
 function hue(s) { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; }
 
+
+async function kfHashOf() {
+  const inp = document.getElementById('kfFile');
+  const f = inp && inp.files[0];
+  if (!f) return null;
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()));
+  let s = '';
+  d.forEach(b => { s += String.fromCharCode(b); });
+  return btoa(s);
+}
+const unlockMsg = async () => ({ type: 'unlock', password: document.getElementById('mp').value, kf: await kfHashOf(), remember: !!(document.getElementById('kfRem') || {}).checked });
+
 let ST = null, tab = null, items = [], view = 'list', q = '', setupMode = 'create';
 
 async function refresh() {
@@ -76,7 +88,9 @@ function renderSetup() {
 function renderLock() {
   return `<div class="body"><form class="card" id="unlockForm">
     <label class="lbl">Master password<input type="password" id="mp" required autocomplete="current-password" autofocus></label>
+    ${ST.keyfile && !ST.kfRemembered ? `<label class="lbl">Keyfile<input type="file" id="kfFile"></label><label class="lbl" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="kfRem" style="width:auto"> Ricorda il keyfile in questo browser</label>` : ''}
     <p class="err" id="uerr" hidden></p><button class="btn pri wide">Sblocca</button></form>
+    ${ST.kfRemembered ? '<button class="btn" data-a="forget-kf">Dimentica il keyfile in questo browser</button>' : ''}
     <button class="btn danger" data-a="wipe">Rimuovi il vault da questo browser</button></div>`;
 }
 
@@ -141,6 +155,7 @@ document.addEventListener('click', async e => {
     switch (b.dataset.a) {
       case 'full': api.runtime.openOptionsPage(); window.close(); break;
       case 'lock': await send({ type: 'lock' }); await refresh(); break;
+      case 'forget-kf': await send({ type: 'forgetKeyfile' }); toast('Keyfile dimenticato'); await refresh(); break;
       case 'setup': setupMode = b.dataset.k; render(); break;
       case 'view': view = b.dataset.k; render(); break;
       case 'fill': await send({ type: 'fillTab', id: b.dataset.id, tabId: tab.id }); window.close(); break;
@@ -164,7 +179,7 @@ document.addEventListener('submit', async e => {
   const f = e.target;
   try {
     if (f.id === 'unlockForm') {
-      try { await send({ type: 'unlock', password: $('#mp').value }); } catch (err) { $('#uerr').textContent = err.message; $('#uerr').hidden = false; return; }
+      try { await send(await unlockMsg()); } catch (err) { $('#uerr').textContent = err.message; $('#uerr').hidden = false; return; }
       await refresh();
     } else if (f.id === 'createForm') {
       if (f.pw.value !== f.pw2.value) throw new Error('Le password non coincidono');

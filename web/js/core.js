@@ -88,24 +88,29 @@ async function decryptJSON(key, box) {
 // ---------------------------------------------------------------- vault (funzioni pure)
 const FILE_NAME = 'scrigno-vault.json';
 
-async function vaultCreate(password) {
+// Keyfile: un file qualsiasi, richiesto oltre alla master password. Si usa la sua impronta SHA-256.
+async function keyfileHash(bytes) { return toB64(await crypto.subtle.digest('SHA-256', bytes)); }
+const kdfSecret = (password, kf) => (kf ? password + '\u0000scrigno-keyfile\u0000' + kf : password);
+
+async function vaultCreate(password, kf = null) {
   const salt = rand(16);
   const dek = await newDEK();
-  const kek = await deriveKEK(password, salt, KDF_ITER);
+  const kek = await deriveKEK(kdfSecret(password, kf), salt, KDF_ITER);
   const t = now();
   const file = {
     format: 'scrigno', v: 1, vaultId: uuid(),
-    kdf: { alg: 'PBKDF2-SHA256', iter: KDF_ITER, salt: toB64(salt) },
+    kdf: { alg: 'PBKDF2-SHA256', iter: KDF_ITER, salt: toB64(salt), ...(kf ? { keyfile: true } : {}) },
     keys: { pw: await wrapKey(dek, kek) },
     keysUpdatedAt: t, data: null, updatedAt: t,
   };
   file.data = await encryptJSON(dek, { items: [] });
   return { file, dek };
 }
-async function vaultUnlock(file, password) {
+async function vaultUnlock(file, password, kf = null) {
   if (!file || file.format !== 'scrigno' || !file.keys) throw new Error('File del vault non valido');
-  const kek = await deriveKEK(password, fromB64(file.kdf.salt), file.kdf.iter);
-  try { return await unwrapKey(file.keys.pw, kek); } catch { throw new Error('Password errata'); }
+  if (file.kdf.keyfile && !kf) throw Object.assign(new Error('Questo vault richiede anche il keyfile'), { code: 'keyfile' });
+  const kek = await deriveKEK(kdfSecret(password, file.kdf.keyfile ? kf : null), fromB64(file.kdf.salt), file.kdf.iter);
+  try { return await unwrapKey(file.keys.pw, kek); } catch { throw new Error(file.kdf.keyfile ? 'Password o keyfile errati' : 'Password errata'); }
 }
 async function vaultRead(file, dek) {
   const d = file.data ? await decryptJSON(dek, file.data) : { items: [] };
@@ -116,11 +121,12 @@ async function vaultWrite(file, dek, items) {
   file.updatedAt = now();
   return file;
 }
-async function vaultChangePassword(file, dek, cur, nw) {
-  await vaultUnlock(file, cur).catch(() => { throw new Error('La password attuale non è corretta'); });
+// Cambia master password e/o keyfile (newKf: impronta del nuovo keyfile, oppure null per non usarlo).
+async function vaultChangePassword(file, dek, cur, nw, curKf = null, newKf = null) {
+  await vaultUnlock(file, cur, curKf).catch(e => { throw new Error(e.code === 'keyfile' ? e.message : 'La password attuale (o il keyfile) non è corretta'); });
   const salt = rand(16);
-  const kek = await deriveKEK(nw, salt, KDF_ITER);
-  file.kdf = { alg: 'PBKDF2-SHA256', iter: KDF_ITER, salt: toB64(salt) };
+  const kek = await deriveKEK(kdfSecret(nw, newKf), salt, KDF_ITER);
+  file.kdf = { alg: 'PBKDF2-SHA256', iter: KDF_ITER, salt: toB64(salt), ...(newKf ? { keyfile: true } : {}) };
   file.keys = { pw: await wrapKey(dek, kek) };
   file.keysUpdatedAt = now();
   return file;
@@ -169,11 +175,68 @@ const TYPES = {
     ['address', 'Indirizzo', 'multi'], ['birthDate', 'Data di nascita'], ['taxCode', 'Codice fiscale'],
     ['docNumber', 'Numero documento', 'secret'], ['notes', 'Note', 'multi']] },
   note: { label: 'Nota sicura', plural: 'Note sicure', icon: '📝', fields: [['notes', 'Testo', 'multi']] },
+  wifi: { label: 'Wi-Fi', plural: 'Wi-Fi', icon: '📶', fields: [
+    ['ssid', 'Nome rete (SSID)'], ['password', 'Password', 'secret'], ['security', 'Sicurezza (WPA2, WPA3…)'], ['notes', 'Note', 'multi']] },
+  bank: { label: 'Conto bancario', plural: 'Conti bancari', icon: '🏦', fields: [
+    ['bankName', 'Banca'], ['holder', 'Intestatario'], ['iban', 'IBAN'], ['bic', 'BIC / SWIFT'], ['username', 'Utente home banking'],
+    ['password', 'Password', 'secret'], ['pin', 'PIN', 'secret'], ['url', 'Sito web', 'url'], ['notes', 'Note', 'multi']] },
+  document: { label: 'Documento', plural: 'Documenti', icon: '🛂', fields: [
+    ['docType', 'Tipo (carta d\'identità, passaporto, patente…)'], ['number', 'Numero', 'secret'], ['name', 'Intestatario'],
+    ['issued', 'Rilasciato il'], ['expires', 'Scadenza'], ['authority', 'Rilasciato da'], ['notes', 'Note', 'multi']] },
+  license: { label: 'Licenza software', plural: 'Licenze', icon: '💿', fields: [
+    ['product', 'Prodotto'], ['key', 'Chiave di licenza', 'secret'], ['email', 'Email registrata'], ['purchased', 'Data di acquisto'],
+    ['url', 'Sito web', 'url'], ['notes', 'Note', 'multi']] },
+  server: { label: 'Server / SSH', plural: 'Server', icon: '🖥️', fields: [
+    ['host', 'Indirizzo'], ['port', 'Porta'], ['username', 'Utente'], ['password', 'Password', 'secret'],
+    ['privateKey', 'Chiave privata', 'secret-multi'], ['notes', 'Note', 'multi']] },
+  email: { label: 'Account email', plural: 'Account email', icon: '✉️', fields: [
+    ['email', 'Indirizzo email'], ['password', 'Password', 'secret'], ['imap', 'Server in entrata (IMAP)'], ['smtp', 'Server in uscita (SMTP)'],
+    ['url', 'Webmail', 'url'], ['notes', 'Note', 'multi']] },
   passkey: { label: 'Passkey', plural: 'Passkey', icon: '🔐', fields: [
     ['rpId', 'Sito (rpId)'], ['username', 'Nome utente'], ['credentialId', 'ID credenziale'],
     ['userHandle', 'User handle'], ['privateKey', 'Chiave privata', 'secret-multi'], ['notes', 'Note', 'multi']] },
 };
 const APP_FIELD = 'App Android';
+
+// Elementi interni (chiavi di altri vault, modelli personalizzati) hanno il tipo che inizia con "_".
+const isInternal = i => String((i && i.type) || '').startsWith('_');
+const isActive = i => !!i && !i.deleted && !i.trashed && !isInternal(i);
+const TRASH_DAYS = 30;
+
+function trashItem(it) { it.trashed = now(); it.updated = now(); return it; }
+function restoreItem(it) { delete it.trashed; it.updated = now(); return it; }
+const tombstone = it => ({ id: it.id, deleted: true, updated: now() });
+// Elimina definitivamente gli elementi nel cestino da più di 30 giorni. Ritorna true se qualcosa è cambiato.
+function purgeTrash(items, days = TRASH_DAYS) {
+  let changed = false;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].trashed && now() - items[i].trashed > days * 864e5) { items[i] = tombstone(items[i]); changed = true; }
+  }
+  return changed;
+}
+// Conserva le password precedenti (al massimo 15) quando cambiano.
+function withHistory(old, item) {
+  const hist = (old && old.history) ? old.history.slice() : [];
+  const before = old && old.f && old.f.password;
+  if (before && before !== item.f.password) hist.unshift({ password: before, until: now() });
+  if (hist.length) item.history = hist.slice(0, 15);
+  return item;
+}
+
+// Modelli personalizzati: elementi interni "_template" con l'elenco dei campi. Gli elementi creati da un modello hanno tipo "tpl:<id>".
+const FIELD_KINDS = { text: 'Testo', secret: 'Segreto', url: 'Indirizzo web', multi: 'Testo lungo', totp: 'Segreto 2FA' };
+function customTypes(items) {
+  const out = {};
+  for (const t of items) {
+    if (t.deleted || t.type !== '_template') continue;
+    let fields = [];
+    try { fields = JSON.parse(t.f.fields || '[]'); } catch { fields = []; }
+    out['tpl:' + t.id] = { label: t.title, plural: t.title, icon: t.f.icon || '📁', custom: true,
+      fields: fields.map(([k, l, kind]) => [k, l, kind === 'text' ? undefined : kind]) };
+  }
+  return out;
+}
+function allTypes(items) { return { ...TYPES, ...customTypes(items || []) }; }
 
 function makeItem(type, title, f, custom = [], fav = false) {
   const t = now();
@@ -204,7 +267,7 @@ function baseDomain(host) {
 // Elementi adatti a un sito (host) o a un'app Android (package).
 function matchLogins(items, { host, pkg }) {
   const bd = host ? baseDomain(host) : '';
-  return items.filter(i => !i.deleted && i.type === 'login').filter(i => {
+  return items.filter(i => isActive(i) && i.type === 'login').filter(i => {
     if (pkg && (i.custom || []).some(c => c.label === APP_FIELD && c.value === pkg)) return true;
     if (pkg && i.f.url && i.f.url.trim() === 'androidapp://' + pkg) return true;
     if (bd && i.f.url) return baseDomain(hostOf(i.f.url)) === bd;
@@ -365,5 +428,54 @@ function importEnpass(json) {
     if (e.note) f.notes = e.note;
     out.push(makeItem(type, e.title, f, custom, !!e.favorite));
   }
+  return out;
+}
+
+// ---------------------------------------------------------------- controlli online (nessun dato del vault esce dal dispositivo)
+// Have I Been Pwned: si invia solo l'inizio (5 caratteri) dell'impronta SHA-1 della password.
+const pwnedCache = new Map();
+async function pwnedCount(password, fetchFn) {
+  const h = [...new Uint8Array(await crypto.subtle.digest('SHA-1', enc.encode(password)))]
+    .map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  const pre = h.slice(0, 5), suf = h.slice(5);
+  let body = pwnedCache.get(pre);
+  if (body == null) {
+    const r = await fetchFn('https://api.pwnedpasswords.com/range/' + pre);
+    if (!r.ok) throw new Error('Servizio di controllo violazioni non raggiungibile (' + r.status + ')');
+    body = await r.text();
+    pwnedCache.set(pre, body);
+  }
+  for (const line of body.split('\n')) {
+    const [sx, c] = line.trim().split(':');
+    if (sx === suf) return +c || 0;
+  }
+  return 0;
+}
+
+// Elenchi pubblici di 2fa.directory: siti che offrono codici 2FA (TOTP) e siti che supportano le passkey.
+async function loadDirectories(fetchFn, cache) {
+  let c = null;
+  try { c = await cache.get('cache-dirs'); } catch { c = null; }
+  if (c && c.ts && now() - c.ts < 7 * 864e5 && c.tfa && c.pk) return c;
+  const get = url => fetchFn(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); });
+  const [tfa, pk] = await Promise.allSettled([get('https://api.2fa.directory/v3/totp.json'), get('https://passkeys-api.2fa.directory/v1/supported.json')]);
+  if (tfa.status === 'rejected' && pk.status === 'rejected') {
+    if (c) return c;
+    throw new Error('Elenchi di 2fa.directory non raggiungibili');
+  }
+  const out = { ts: now(), tfa: (c && c.tfa) || {}, pk: (c && c.pk) || {} };
+  if (tfa.status === 'fulfilled') {
+    out.tfa = {};
+    for (const [name, d] of tfa.value || []) {
+      for (const dom of [d.domain, ...(d['additional-domains'] || [])]) if (dom) out.tfa[baseDomain(dom)] = [name, d.documentation || d.url || ''];
+    }
+  }
+  if (pk.status === 'fulfilled') {
+    out.pk = {};
+    for (const [dom, d] of Object.entries(pk.value || {})) {
+      for (const x of [dom, ...((d && d['additional-domains']) || [])]) out.pk[baseDomain(x)] = (d && d.documentation) || '';
+    }
+  }
+  try { await cache.set('cache-dirs', out); } catch { /* ignora */ }
   return out;
 }

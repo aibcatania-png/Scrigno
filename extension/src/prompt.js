@@ -14,15 +14,29 @@ async function send(msg) {
 const answer = a => send({ type: 'promptAnswer', id, answer: a });
 let P = null;
 
+let ST = {};
 function unlockForm(text) {
   return `<form class="card" id="unlockForm"><p>${esc(text)}</p>
     <label class="lbl">Master password<input type="password" id="mp" required autocomplete="current-password"></label>
+    ${ST.keyfile && !ST.kfRemembered ? `<label class="lbl">Keyfile<input type="file" id="kfFile"></label><label class="lbl" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="kfRem" style="width:auto"> Ricorda il keyfile in questo browser</label>` : ''}
     <p class="err" id="uerr" hidden></p><button class="btn pri wide">Sblocca</button></form>`;
 }
+async function kfHashOf() {
+  const inp = document.getElementById('kfFile');
+  const f = inp && inp.files[0];
+  if (!f) return null;
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()));
+  let s = '';
+  d.forEach(b => { s += String.fromCharCode(b); });
+  return btoa(s);
+}
+const unlockMsg = async () => ({ type: 'unlock', password: document.getElementById('mp').value, kf: await kfHashOf(), remember: !!(document.getElementById('kfRem') || {}).checked });
+
 
 async function render() {
   const d = P.data;
   const st = await send({ type: 'state' });
+  ST = st;
   let html = `<div class="brand">${LOGO} Scrigno</div>`;
   if (P.kind === 'unlock') {
     html += st.unlocked ? '<p>Sbloccato.</p>' : unlockForm(d.reason || 'Sblocca Scrigno');
@@ -60,7 +74,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('submit', async e => {
   e.preventDefault();
-  try { await send({ type: 'unlock', password: $('#mp').value }); } catch (err) { $('#uerr').textContent = err.message; $('#uerr').hidden = false; return; }
+  try { await send(await unlockMsg()); } catch (err) { $('#uerr').textContent = err.message; $('#uerr').hidden = false; return; }
   await render();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') answer({ cancel: true }); });

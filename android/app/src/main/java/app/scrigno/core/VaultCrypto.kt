@@ -19,6 +19,7 @@ object B64 {
 }
 
 class WrongPasswordException : Exception("Password errata")
+class KeyfileRequiredException : Exception("Questo vault usa un keyfile: sbloccalo con la biometria oppure apri l'app Scrigno")
 
 /**
  * Formato del vault identico alla web app (core.js):
@@ -64,6 +65,7 @@ object VaultCrypto {
     /** Ricava la DEK dalla master password. */
     fun unlock(file: JSONObject, password: String): ByteArray {
         val kdf = file.getJSONObject("kdf")
+        if (kdf.optBoolean("keyfile")) throw KeyfileRequiredException()
         val kek = pbkdf2(password, B64.dec(kdf.getString("salt")), kdf.getInt("iter"))
         val w = file.getJSONObject("keys").getJSONObject("pw")
         try {

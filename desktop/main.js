@@ -104,10 +104,11 @@ const methods = {
     if (clearSec) clipTimer = setTimeout(() => { if (clipboard.readText() === text) clipboard.clear(); }, clearSec * 1000);
     return true;
   },
-  async saveFile({ name, text }) {
-    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'JSON', extensions: ['json'] }] });
+  async saveFile({ name, text, b64 }) {
+    const ext = path.extname(name).slice(1);
+    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), path.basename(name)), filters: ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [] });
     if (r.canceled || !r.filePath) return false;
-    await fs.promises.writeFile(r.filePath, text);
+    await fs.promises.writeFile(r.filePath, b64 != null ? Buffer.from(b64, 'base64') : text);
     return true;
   },
   async folderPick() {

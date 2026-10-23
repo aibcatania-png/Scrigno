@@ -76,6 +76,9 @@ enum VaultCrypto {
               let iv = B64.dec(w["iv"] as? String ?? ""), let ct = B64.dec(w["ct"] as? String ?? "") else {
             throw ScrignoError.message("File del vault non valido")
         }
+        if (kdf["keyfile"] as? Bool) == true {
+            throw ScrignoError.message("Questo vault usa un keyfile: sbloccalo con Face ID oppure dall'app")
+        }
         let kek = pbkdf2(password, salt: salt, iterations: iter)
         do { return try open(key: kek, iv: iv, ct: ct, aad: nil) } catch { throw ScrignoError.wrongPassword }
     }

@@ -22,6 +22,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import app.scrigno.core.Vault
 import app.scrigno.core.VaultCrypto
+import app.scrigno.core.KeyfileRequiredException
 import app.scrigno.core.WrongPasswordException
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -111,7 +112,11 @@ abstract class UnlockActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     main.post {
                         progress.visibility = View.GONE
-                        error.text = if (e is WrongPasswordException) "Password errata" else (e.message ?: "Errore")
+                        error.text = when (e) {
+                            is WrongPasswordException -> "Password errata"
+                            is KeyfileRequiredException -> e.message
+                            else -> e.message ?: "Errore"
+                        }
                         error.visibility = View.VISIBLE
                     }
                 }

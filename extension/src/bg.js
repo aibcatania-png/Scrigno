@@ -7,7 +7,7 @@
 
 const api = typeof browser !== 'undefined' ? browser : chrome;
 const B = {
-  file: null, dek: null, items: [], sync: null, syncState: 'idle', syncErr: null,
+  file: null, dek: null, items: [], extra: [], sync: null, syncState: 'idle', syncErr: null,
   settings: { autoLockMin: 15 }, lastAct: now(), loaded: false,
   pendingSave: new Map(),   // tabId -> { host, url, username, password, existingId, ts }
   prompts: new Map(),       // id -> { kind, data, resolve, windowId }
@@ -30,18 +30,36 @@ async function ensureLoaded() {
     try {
       B.dek = await importDEK(fromB64(s.dek));
       B.items = await vaultRead(B.file, B.dek);
+      await loadExtras();
       B.lastAct = s.lastAct || now();
       B.sync = await loadSync();
     } catch { B.dek = null; B.items = []; await session.remove('dek'); }
   }
   B.loaded = true;
 }
-const live = () => B.items.filter(i => !i.deleted);
+// Elementi attivi di tutti i vault (principale + aggiuntivi), senza cestino ed elementi interni.
+const live = () => [...B.items.filter(isActive), ...B.extra.flatMap(v => v.items.filter(isActive))];
+function ownerOf(id) {
+  if (B.items.some(i => i.id === id)) return { arr: B.items, vault: null };
+  const v = B.extra.find(x => x.items.some(i => i.id === id));
+  return v ? { arr: v.items, vault: v } : { arr: B.items, vault: null };
+}
+async function loadExtras() {
+  const next = [];
+  for (const k of vaultKeyItems(B.items)) {
+    const have = B.extra.find(v => v.keyId === k.id);
+    if (have) { have.name = k.title; next.push(have); continue; }
+    try { next.push(await openExtraVault(local, k)); } catch { /* vault non leggibile */ }
+  }
+  B.extra = next;
+}
 const touch = () => { B.lastAct = now(); session.set({ lastAct: B.lastAct }); };
 
 async function setUnlocked(dek) {
   B.dek = dek;
   B.items = await vaultRead(B.file, dek);
+  B.extra = [];
+  await loadExtras();
   await session.set({ dek: await exportDEK(dek), lastAct: now() });
   B.sync = await loadSync();
   const { pendingSync } = await session.get('pendingSync');
@@ -51,7 +69,7 @@ async function setUnlocked(dek) {
   if (B.sync) syncNow();
 }
 async function lock() {
-  B.dek = null; B.items = []; B.sync = null;
+  B.dek = null; B.items = []; B.extra = []; B.sync = null;
   await session.remove(['dek', 'lastAct']);
   updateBadge();
 }
@@ -103,18 +121,33 @@ function scheduleSync(ms = 1500) {
   syncTimer = setTimeout(() => syncNow(), ms);
 }
 async function syncNow() {
-  if (!B.sync || !B.dek || syncing) return;
+  if (!B.dek || syncing) return;
+  if (!B.sync && !B.extra.some(v => v.cfg)) return;
   syncing = true;
   B.syncState = 'busy';
+  const errors = [];
   try {
-    const r = await cloudSync({ file: B.file, dek: B.dek, items: B.items, cfg: B.sync });
-    B.items = r.items;
-    if (r.changedLocal || r.uploaded) await local.set('vault', B.file);
-    B.sync.lastSync = now();
-    await saveSync(B.sync);
-    B.syncErr = null; B.syncState = 'ok';
-  } catch (e) {
-    B.syncErr = e.message; B.syncState = 'err';
+    if (B.sync) {
+      try {
+        const r = await cloudSync({ file: B.file, dek: B.dek, items: B.items, cfg: B.sync });
+        B.items = r.items;
+        if (r.changedLocal || r.uploaded) await local.set('vault', B.file);
+        B.sync.lastSync = now();
+        await saveSync(B.sync);
+      } catch (e) { errors.push(e.message); }
+    }
+    await loadExtras();
+    let keysChanged = false;
+    for (const v of B.extra) {
+      if (!v.cfg) continue;
+      const key = B.items.find(i => i.id === v.keyId);
+      const before = key ? stableCfg(vaultCloudCfg(key)) : '';
+      try { await syncExtraVault(local, v); } catch (e) { errors.push(v.name + ': ' + e.message); }
+      if (key && stableCfg(v.cfg) !== before) { key.f.cloud = JSON.stringify(v.cfg); key.updated = now(); keysChanged = true; }
+    }
+    if (keysChanged) await persist();
+    B.syncErr = errors[0] || null;
+    B.syncState = errors.length ? 'err' : 'ok';
   } finally { syncing = false; }
 }
 
@@ -146,8 +179,15 @@ async function offerSave(tabId, host, url, username, password) {
 
 async function doSave(p) {
   if (p.existingId) {
-    const it = B.items.find(i => i.id === p.existingId);
-    if (it) { it.f.password = p.password; it.updated = now(); it.pwChanged = now(); }
+    const own = ownerOf(p.existingId);
+    const it = own.arr.find(i => i.id === p.existingId);
+    if (it) {
+      if (it.f.password && it.f.password !== p.password) {
+        it.history = [{ password: it.f.password, until: now() }, ...(it.history || [])].slice(0, 15);
+      }
+      it.f.password = p.password; it.updated = now(); it.pwChanged = now();
+    }
+    if (own.vault) { await saveExtraVault(local, own.vault); scheduleSync(); return; }
   } else {
     B.items.push(makeItem('login', baseDomain(p.host), { username: p.username, password: p.password, url: new URL(p.url).origin }));
   }
@@ -247,10 +287,19 @@ async function handlePasskey(msg, sender) {
 const handlers = {
   // --- popup e pagine dell'estensione
   async state() {
-    return { hasVault: !!B.file, unlocked: !!B.dek, sync: B.sync ? { provider: B.sync.provider, name: PROVIDERS[B.sync.provider].name, lastSync: B.sync.lastSync } : null,
+    const kfOn = !!(B.file && B.file.kdf && B.file.kdf.keyfile);
+    return { hasVault: !!B.file, unlocked: !!B.dek, keyfile: kfOn, kfRemembered: kfOn && !!(await local.get('kf-' + B.file.vaultId)), vaults: B.extra.length + 1, sync: B.sync ? { provider: B.sync.provider, name: PROVIDERS[B.sync.provider].name, lastSync: B.sync.lastSync } : null,
       syncState: B.syncState, syncErr: B.syncErr, settings: B.settings, providers: providerList().map(k => [k, PROVIDERS[k].name]), redirect: Cloud.env.redirect() };
   },
-  async unlock({ password }) { await setUnlocked(await vaultUnlock(B.file, password)); return true; },
+  async unlock({ password, kf, remember }) {
+    const needKf = !!(B.file && B.file.kdf && B.file.kdf.keyfile);
+    const key = 'kf-' + (B.file && B.file.vaultId);
+    const useKf = needKf ? (kf || (await local.get(key)) || null) : null;
+    await setUnlocked(await vaultUnlock(B.file, password, useKf));
+    if (needKf && kf && remember) await local.set(key, kf);
+    return true;
+  },
+  async forgetKeyfile() { await local.del('kf-' + (B.file && B.file.vaultId)); return true; },
   async lock() { await lock(); return true; },
   async create({ password }) {
     const v = await vaultCreate(password);
