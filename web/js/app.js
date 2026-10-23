@@ -925,7 +925,8 @@ function provFields(p) {
   }
   if (p === 'gdrive') {
     return `<label class="lbl">Client ID OAuth Google<input data-c="clientId" value="${esc(ids.clientId || '')}" autocomplete="off"></label>
-      <p class="hint">Client ID “Applicazione web” con l'API Google Drive abilitata e questo URI di reindirizzamento: ${redirectHint()}. Con Google l'accesso va rinnovato ogni ora: per le app meglio Dropbox o OneDrive.</p>`;
+      <label class="lbl">Client secret<input data-c="clientSecret" value="${esc(ids.gSecret || '')}" autocomplete="off"></label>
+      <p class="hint">Client ID “Applicazione web” con l'API Google Drive abilitata e questo URI di reindirizzamento: ${redirectHint()}. Con il client secret l'accesso resta collegato; senza, va rinnovato ogni ora. Pubblica l'app nella schermata di consenso (“In produzione”), altrimenti Google la scollega dopo 7 giorni.</p>`;
   }
   if (p === 'folder') {
     return `<p class="hint">${Native.platform === 'ios'
@@ -948,7 +949,7 @@ function readCloudForm(root) {
   root.querySelectorAll('[data-c]').forEach(i => { cfg[i.dataset.c] = i.value.trim(); });
   if (cfg.provider === 'dropbox') saveIds({ appKey: cfg.appKey });
   if (cfg.provider === 'onedrive') saveIds({ msClientId: cfg.clientId });
-  if (cfg.provider === 'gdrive') saveIds({ clientId: cfg.clientId });
+  if (cfg.provider === 'gdrive') saveIds({ clientId: cfg.clientId, gSecret: cfg.clientSecret });
   return cfg;
 }
 
@@ -1518,10 +1519,10 @@ async function onClick(e) {
     }
     case 'reauth': {
       const old = S.sync;
-      const c = await connectCloud({ provider: old.provider, clientId: old.clientId, appKey: old.appKey });
+      const c = await connectCloud({ provider: old.provider, clientId: old.clientId, clientSecret: old.clientSecret, appKey: old.appKey });
       await saveSyncCfg({ ...old, ...c });
       // aggiorna anche i vault aggiuntivi sullo stesso servizio
-      for (const v of S.extra) if (v.cfg && v.cfg.provider === c.provider) Object.assign(v.cfg, { access: c.access, exp: c.exp, refresh: c.refresh || v.cfg.refresh });
+      for (const v of S.extra) if (v.cfg && v.cfg.provider === c.provider) Object.assign(v.cfg, { access: c.access, exp: c.exp, refresh: c.refresh || v.cfg.refresh, clientSecret: c.clientSecret || v.cfg.clientSecret });
       S.syncErr = null;
       await syncNow(false);
       renderMain();

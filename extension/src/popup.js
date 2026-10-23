@@ -53,7 +53,8 @@ function header() {
 
 function providerFields(p) {
   if (p === 'dropbox') return '<label class="lbl">App key Dropbox<input data-c="appKey" autocomplete="off"></label>';
-  if (p === 'onedrive' || p === 'gdrive') return `<label class="lbl">${p === 'gdrive' ? 'Client ID Google' : 'ID applicazione Microsoft'}<input data-c="clientId" autocomplete="off"></label>`;
+  if (p === 'gdrive') return '<label class="lbl">Client ID Google<input data-c="clientId" autocomplete="off"></label><label class="lbl">Client secret Google<input data-c="clientSecret" autocomplete="off"></label>';
+  if (p === 'onedrive') return '<label class="lbl">ID applicazione Microsoft<input data-c="clientId" autocomplete="off"></label>';
   return `<label class="lbl">Indirizzo del file WebDAV<input data-c="url" placeholder="https://…/scrigno-vault.json" autocomplete="off"></label>
     <label class="lbl">Utente<input data-c="user" autocomplete="off"></label><label class="lbl">Password per app<input data-c="pass" type="password" autocomplete="off"></label>`;
 }

@@ -114,6 +114,21 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   ok(op.items.length === 1 && op.items[0].title === 'Intranet' && op.name === 'Lavoro', 'vault aggiuntivo: riaperto con la chiave del principale');
   ok(!!(await R(`vaultUnlock(__xv.file, 'frase-lavoro-lunga')`)), 'vault aggiuntivo: apribile anche con la sua password');
   ok(R(`cloudCfgForFile({provider:'dropbox',fileId:'x',appKey:'k'},'a.json')`).fileName === 'a.json', 'cloud: nome file per vault');
+  // Google Drive con refresh token (servizio finto)
+  ctx.__glog = [];
+  R(`Cloud.env = { redirect: () => 'https://x/oauth-app.html', authorize: async (h, url, st) => { __glog.push(url); return { code: 'C1', state: st }; },
+    fetch: async (url, opt = {}) => { const b = opt.body ? String(opt.body) : ''; __glog.push(url + ' ' + b);
+      if (url.includes('oauth2.googleapis.com/token')) return { ok: true, json: async () => b.includes('authorization_code') ? { access_token: 'A1', refresh_token: 'R1', expires_in: 3600 } : { access_token: 'A2', expires_in: 3600 } };
+      const auth = opt.headers && opt.headers.Authorization;
+      if (auth === 'Bearer A1') return { ok: false, status: 401 };
+      return { ok: true, status: 200, json: async () => ({ files: [] }) }; } }`);
+  const gc = await R(`PROVIDERS.gdrive.connect({ clientId: 'cid', clientSecret: 'sec' })`);
+  ctx.__gc = gc;
+  ok(gc.refresh === 'R1' && /access_type=offline/.test(ctx.__glog[0]) && /code_challenge=/.test(ctx.__glog[0]), 'Google Drive: flusso con codice e refresh token');
+  ok(await R(`PROVIDERS.gdrive.download(__gc)`) === null && ctx.__gc.access === 'A2' && ctx.__glog.some(l => l.includes('grant_type=refresh_token') && l.includes('client_secret=sec')), 'Google Drive: token rinnovato da solo');
+  const gi = await R(`(async()=>{ Cloud.env.authorize = async () => ({ access_token: 'T', expires_in: 3600 }); return PROVIDERS.gdrive.connect({ clientId: 'cid' }); })()`);
+  ok(gi.access === 'T' && !gi.refresh, 'Google Drive: senza secret resta il flusso implicito');
+  R(`Cloud.env = null`);
   // violazioni (Have I Been Pwned, finto)
   const fakeFetch = async url => ({ ok: true, text: async () => url.endsWith('/5BAA6') ? '1E4C9B93F3F0682250B6CF8331B7EE68FD7:3\r\n1E4C9B93F3F0682250B6CF8331B7EE68FD8:9545824' : '' });
   ctx.__ff = fakeFetch;

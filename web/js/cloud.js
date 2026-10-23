@@ -131,22 +131,56 @@ const OneDrive = {
 };
 
 const reauthErr = () => Object.assign(new Error('Accesso a Google Drive scaduto: premi “Riconnetti” nelle impostazioni.'), { code: 'reauth' });
+const G_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
+const G_TOKEN = 'https://oauth2.googleapis.com/token';
+const G_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+/*
+ * Con il "Client secret" Scrigno usa il flusso con codice (PKCE + refresh token): l'accesso
+ * resta valido senza ricollegarsi. Senza secret ripiega sul flusso implicito (token di un'ora).
+ */
 const GDrive = {
   name: 'Google Drive',
   async connect(cfg, h) {
     if (!cfg.clientId) throw new Error('Inserisci il Client ID di Google.');
     const state = oauthState();
-    const d = await Cloud.env.authorize(h, 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-      client_id: cfg.clientId, redirect_uri: Cloud.env.redirect(), response_type: 'token',
-      scope: 'https://www.googleapis.com/auth/drive.appdata', state,
+    const redirect = Cloud.env.redirect();
+    if (!cfg.clientSecret) {
+      const d = await Cloud.env.authorize(h, G_AUTH + '?' + new URLSearchParams({
+        client_id: cfg.clientId, redirect_uri: redirect, response_type: 'token', scope: G_SCOPE, state,
+      }), state);
+      if (!d.access_token) throw new Error('Google non ha restituito l\'accesso.');
+      return { provider: 'gdrive', clientId: cfg.clientId, access: d.access_token, exp: now() + (+d.expires_in || 3600) * 1000 - 60000 };
+    }
+    const { verifier, challenge } = await pkcePair();
+    const p = await Cloud.env.authorize(h, G_AUTH + '?' + new URLSearchParams({
+      client_id: cfg.clientId, redirect_uri: redirect, response_type: 'code', scope: G_SCOPE, state,
+      access_type: 'offline', prompt: 'consent', code_challenge: challenge, code_challenge_method: 'S256',
     }), state);
-    if (!d.access_token) throw new Error('Google non ha restituito l\'accesso.');
-    return { provider: 'gdrive', clientId: cfg.clientId, access: d.access_token, exp: now() + (+d.expires_in || 3600) * 1000 - 60000 };
+    if (!p.code) throw new Error('Google non ha restituito l\'autorizzazione.');
+    const tok = await tokenRequest(G_TOKEN, { client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: 'authorization_code',
+      code: p.code, redirect_uri: redirect, code_verifier: verifier }, 'Google Drive');
+    return { provider: 'gdrive', clientId: cfg.clientId, clientSecret: cfg.clientSecret, refresh: tok.refresh_token,
+      access: tok.access_token, exp: now() + (+tok.expires_in || 3600) * 1000 - 60000 };
+  },
+  async token(c) {
+    if (c.access && c.exp > now()) return c.access;
+    if (!c.refresh || !c.clientSecret) throw reauthErr();
+    const tok = await tokenRequest(G_TOKEN, { client_id: c.clientId, client_secret: c.clientSecret, grant_type: 'refresh_token', refresh_token: c.refresh }, 'Google Drive')
+      .catch(e => { throw Object.assign(new Error('Accesso a Google Drive scaduto: premi “Riconnetti” nelle impostazioni. ' + e.message), { code: 'reauth' }); });
+    c.access = tok.access_token;
+    c.refresh = tok.refresh_token || c.refresh;
+    c.exp = now() + (+tok.expires_in || 3600) * 1000 - 60000;
+    return c.access;
   },
   async api(c, url, opt = {}) {
-    if (!c.access || c.exp < now()) throw reauthErr();
-    const r = await Cloud.env.fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + c.access } });
-    if (r.status === 401) { c.access = null; throw reauthErr(); }
+    const auth = async () => ({ ...(opt.headers || {}), Authorization: 'Bearer ' + await this.token(c) });
+    let r = await Cloud.env.fetch(url, { ...opt, headers: await auth() });
+    if (r.status === 401) {
+      c.access = null;
+      if (!c.refresh) throw reauthErr();
+      r = await Cloud.env.fetch(url, { ...opt, headers: await auth() });
+      if (r.status === 401) throw reauthErr();
+    }
     if (!r.ok && r.status !== 404) throw new Error('Google Drive: errore ' + r.status);
     return r;
   },
