@@ -32,7 +32,7 @@ const S = {
 };
 
 function loadSettings() {
-  const def = { autoLockMin: 5, clipClearSec: 30, mainName: 'Personale' };
+  const def = { autoLockMin: 5, clipClearSec: 30, mainName: 'Personale', sort: 'az' };
   try { return { ...def, ...JSON.parse(localStorage.getItem('scrigno-settings') || '{}') }; } catch { return def; }
 }
 function saveSettings() {
@@ -388,16 +388,29 @@ function setSync(st) {
 // ---------------------------------------------------------------- interfaccia
 const PAGES = ['audit', 'gen', 'settings', 'template'];
 const BASE_SECTIONS = ['login', 'card', 'identity', 'note', 'passkey'];
+function issueCount() {
+  const logins = allLive().filter(i => i.f && i.f.password);
+  const counts = new Map();
+  logins.forEach(i => counts.set(i.f.password, (counts.get(i.f.password) || 0) + 1));
+  return logins.filter(i => strength(i.f.password).lvl <= 1 || counts.get(i.f.password) > 1 ||
+    now() - (i.pwChanged || i.created) > 365 * 864e5 || (S.pwned && S.pwned.get(i.id))).length;
+}
+// Barra laterale: [chiave, etichetta, icona] oppure ['-h', titolo del gruppo].
 function sections() {
   const all = types();
-  const used = new Set(allLive().map(i => i.type));
+  const items = live();
+  const used = new Set(items.map(i => i.type));
   const typeKeys = Object.keys(all).filter(k => BASE_SECTIONS.includes(k) || used.has(k) || all[k].custom);
+  const tags = allTags(items);
   const n = trashedItems().length;
   return [
-    ['all', 'Tutti', '🗂️'], ['fav', 'Preferiti', '⭐'],
+    ['all', 'Tutti gli elementi', '🗂️'], ['fav', 'Preferiti', '⭐'],
+    ['-h', 'Categorie'],
     ...typeKeys.map(k => [k, all[k].plural, all[k].icon]),
+    ...(tags.length ? [['-h', 'Tag'], ...tags.map(([t]) => ['tag:' + t, t, '🏷️'])] : []),
+    ['-h', 'Strumenti'],
+    ['audit', 'Sicurezza', '🛡️'], ['gen', 'Generatore', '🎲'],
     ...(n ? [['trash', 'Cestino', '🗑️']] : []),
-    ['audit', 'Sicurezza', '🛡️'], ['gen', 'Generatore', '🎲'], ['settings', 'Impostazioni', '⚙️'],
   ];
 }
 const LOGO = `<svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="8" fill="var(--acc)"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="var(--on-acc)" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="var(--on-acc)"/><circle cx="16" cy="19" r="1.8" fill="var(--acc)"/><rect x="15.2" y="19.6" width="1.6" height="3" rx=".8" fill="var(--acc)"/></svg>`;
@@ -492,14 +505,21 @@ function renderLock() {
   if (mp) mp.focus();
 }
 
+function inSection(i, k) {
+  if (k === 'all') return true;
+  if (k === 'fav') return !!i.fav;
+  if (k.startsWith('tag:')) return (i.tags || []).includes(k.slice(4));
+  return i.type === k;
+}
 function countFor(k) {
+  if (k === 'audit') { const n = issueCount(); return n ? `<span class="cnt warn">${n}</span>` : ''; }
   if (PAGES.includes(k)) return '';
-  const list = k === 'trash' ? trashedItems() : live().filter(i => k === 'all' || (k === 'fav' ? i.fav : i.type === k));
+  const list = k === 'trash' ? trashedItems() : live().filter(i => inSection(i, k));
   return list.length ? `<span class="cnt">${list.length}</span>` : '';
 }
 
 function vaultPicker() {
-  if (!S.extra.length) return '';
+  if (!S.extra.length) return `<div class="vaultname" title="Vault">🗄️ <span class="nl">${esc(vaultName(MAIN))}</span></div>`;
   const ids = vaultIds();
   return `<select id="vaultSel" class="vaultsel" title="Vault">
     <option value="all" ${S.view.vault === 'all' ? 'selected' : ''}>Tutti i vault</option>
@@ -514,15 +534,22 @@ function renderMain() {
   $('#app').innerHTML = `<div class="shell ${page ? 'pagemode' : ''} ${v.id || v.edit ? 'show-detail' : ''}">
     <aside class="nav">
       <div class="brand">${LOGO}<span>Scrigno</span></div>
-      <nav>${sections().map(([k, l, i]) => `<button class="nav-btn ${v.section === k ? 'on' : ''}" data-act="section" data-k="${esc(k)}"><span class="ni">${i}</span><span class="nl">${esc(l)}</span>${countFor(k)}</button>`).join('')}</nav>
+      ${vaultPicker()}
+      <nav>${sections().map(([k, l, i]) => k === '-h' ? `<div class="nav-h">${esc(l)}</div>`
+        : `<button class="nav-btn ${v.section === k ? 'on' : ''}" data-act="section" data-k="${esc(k)}" title="${esc(l)}"><span class="ni">${i}</span><span class="nl">${esc(l)}</span>${countFor(k)}</button>`).join('')}</nav>
       <div class="nav-foot">
-        <button class="sync-pill" id="syncPill" data-act="sync" data-state="${S.syncState}">${syncLabel()}</button>
-        <button class="btn ghost" data-act="lock" title="Blocca">🔒<span class="nl"> Blocca</span></button>
+        <button class="nav-btn ${v.section === 'settings' ? 'on' : ''}" data-act="section" data-k="settings" title="Impostazioni"><span class="ni">⚙️</span><span class="nl">Impostazioni</span></button>
+        <div class="nav-row">
+          <button class="sync-pill" id="syncPill" data-act="sync" data-state="${S.syncState}" title="Sincronizzazione">${syncLabel()}</button>
+          <button class="btn ghost" data-act="lock" title="Blocca (Ctrl+L)">🔒<span class="nl"> Blocca</span></button>
+        </div>
       </div>
     </aside>
     ${page ? `<section class="page">${pageHtml}</section>`
       : `<section class="list">
-          <div class="list-head">${vaultPicker()}<input id="q" type="search" placeholder="Cerca…" value="${esc(v.q)}" autocomplete="off">${v.section === 'trash' ? '' : '<button class="btn primary" data-act="new" title="Nuovo">＋</button>'}</div>
+          <div class="list-head"><input id="q" type="search" placeholder="Cerca in ${esc(sectionTitle())}…" value="${esc(v.q)}" autocomplete="off" title="Cerca (Ctrl+F)">${v.section === 'trash' ? '' : '<button class="btn primary" data-act="new" title="Nuovo elemento (Ctrl+N)">＋</button>'}</div>
+          <div class="list-sub"><b>${esc(sectionTitle())}</b><span>${visibleItems().length}</span>
+            <select id="sortSel" title="Ordina">${[['az', 'Nome A–Z'], ['za', 'Nome Z–A'], ['recent', 'Modificati di recente'], ['created', 'Creati di recente']].map(([k, l]) => `<option value="${k}" ${S.settings.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
           <div id="items">${renderList()}</div>
         </section>
         <section class="detail">${renderDetail()}</section>`}
@@ -536,10 +563,25 @@ function renderMain() {
 function visibleItems() {
   const { section, q } = S.view;
   const ql = q.trim().toLowerCase();
-  const base = section === 'trash' ? trashedItems() : live().filter(i => section === 'all' || (section === 'fav' ? i.fav : i.type === section));
+  const base = section === 'trash' ? trashedItems() : live().filter(i => inSection(i, section));
+  const sort = S.settings.sort || 'az';
+  const cmp = {
+    az: (a, b) => a.title.localeCompare(b.title, 'it'),
+    za: (a, b) => b.title.localeCompare(a.title, 'it'),
+    recent: (a, b) => (b.updated || 0) - (a.updated || 0),
+    created: (a, b) => (b.created || 0) - (a.created || 0),
+  }[sort] || ((a, b) => a.title.localeCompare(b.title, 'it'));
   return base
-    .filter(i => !ql || [i.title, ...Object.values(i.f || {})].some(x => x && typeof x === 'string' && x.toLowerCase().includes(ql)))
-    .sort((a, b) => (section === 'trash' ? b.trashed - a.trashed : 0) || (!!b.fav - !!a.fav) || a.title.localeCompare(b.title, 'it'));
+    .filter(i => !ql || [i.title, ...(i.tags || []), ...Object.values(i.f || {})].some(x => x && typeof x === 'string' && x.toLowerCase().includes(ql)))
+    .sort((a, b) => (section === 'trash' ? b.trashed - a.trashed : 0) || cmp(a, b));
+}
+function sectionTitle() {
+  const k = S.view.section;
+  if (k === 'all') return 'Tutti gli elementi';
+  if (k === 'fav') return 'Preferiti';
+  if (k === 'trash') return 'Cestino';
+  if (k.startsWith('tag:')) return k.slice(4);
+  return (types()[k] || {}).plural || '';
 }
 function renderList() {
   const items = visibleItems();
@@ -621,8 +663,9 @@ function renderDetail() {
   return `<div class="dhead">
       <button class="btn ghost back" data-act="back">‹</button>
       <div class="dtitle">${letterIcon(it, true)}<div><h2>${esc(it.title)}</h2><small>${T.icon} ${esc(T.label)}${S.extra.length ? ' · 🗄️ ' + esc(vaultName(vid)) : ''}</small></div></div>
-      <div class="dactions"><button class="btn ghost" data-act="fav" title="Preferito">${it.fav ? '★' : '☆'}</button><button class="btn" data-act="edit">Modifica</button></div>
+      <div class="dactions"><button class="btn ghost" data-act="fav" title="Preferito">${it.fav ? '★' : '☆'}</button><button class="btn" data-act="edit" title="Modifica (Ctrl+E)">Modifica</button></div>
     </div>
+    ${(it.tags || []).length ? `<div class="tags">${it.tags.map(t => `<button class="tag" data-act="section" data-k="tag:${esc(t)}">🏷️ ${esc(t)}</button>`).join('')}</div>` : ''}
     <div class="fields">${rows + orphan + custom || '<p class="hint">Nessun campo compilato.</p>'}</div>
     ${attachmentsBlock(it.attachments || [], false)}
     ${historyBlock(it)}
@@ -664,13 +707,15 @@ function renderEdit() {
   const f = it ? it.f : {};
   const curVault = it ? vaultOf(it.id) : (S.view.vault !== 'all' ? S.view.vault : MAIN);
   return `<form id="editForm" class="edit stack" data-type="${esc(type)}" autocomplete="off">
-    <div class="dhead"><button type="button" class="btn ghost" data-act="cancel">‹ Annulla</button><h2>${T.icon} ${it ? 'Modifica' : 'Nuovo'}</h2><button class="btn primary" type="submit">Salva</button></div>
+    <div class="dhead"><button type="button" class="btn ghost" data-act="cancel">‹ Annulla</button><h2>${T.icon} ${it ? 'Modifica' : 'Nuovo'}</h2><button class="btn primary" type="submit" title="Salva (Ctrl+S)">Salva</button></div>
     <label class="lbl">Titolo<input name="title" required value="${esc(it ? it.title : '')}" autocomplete="off"></label>
     ${S.extra.length ? `<label class="lbl">Vault<select name="vault">${vaultIds().map(id => `<option value="${id}" ${id === curVault ? 'selected' : ''}>${esc(vaultName(id))}</option>`).join('')}</select></label>` : ''}
     ${T.fields.map(([k, l, kind]) => editField(k, l, kind, f[k])).join('')}
     <div class="custom" id="customList">${(it ? it.custom || [] : []).map(customRow).join('')}</div>
     <button type="button" class="btn ghost left" data-act="add-custom">＋ Campo personalizzato</button>
     <div id="attList">${attachmentsBlock(S.editAtt, true)}</div>
+    <label class="lbl">Tag (separati da virgola)<input name="tags" list="tagList" value="${esc((it ? it.tags || [] : S.view.section.startsWith('tag:') ? [S.view.section.slice(4)] : []).join(', '))}" autocomplete="off" placeholder="Es. lavoro, banca">
+      <datalist id="tagList">${allTags(allLive()).map(([t]) => `<option value="${esc(t)}">`).join('')}</datalist></label>
     <label class="chk"><input type="checkbox" name="fav" ${it && it.fav ? 'checked' : ''}> Preferito</label>
   </form>`;
 }
@@ -701,6 +746,8 @@ async function saveEdit(form) {
     pwChanged: f.password && f.password !== (old && old.f.password) ? t : old && old.pwChanged,
   });
   if (S.editAtt.length) item.attachments = S.editAtt;
+  const tags = normTags(fd.get('tags'));
+  if (tags.length) item.tags = tags;
   if (old && oldVault !== target) {
     // spostato in un altro vault: nuovo id nel vault di destinazione, eliminazione nel vecchio
     replaceItem(oldVault, tombstone(old));
@@ -997,6 +1044,9 @@ function renderSettings() {
         : '<p class="hint">Non disponibile su questo dispositivo.</p>'}
     </div>
     ${keyfileCard()}
+    <div class="card stack"><h3>Scorciatoie da tastiera</h3>
+      <p class="hint">Sul computer: Ctrl (⌘ su Mac) + F per cercare, + N per un nuovo elemento, + E per modificare, + S per salvare, + L per bloccare. Premi <kbd>?</kbd> per l'elenco completo.</p>
+      <button class="btn left" data-act="shortcuts">Mostra tutte le scorciatoie</button></div>
     <div class="card stack"><h3>Blocco e appunti</h3>
       <label class="lbl">Blocca automaticamente dopo<select data-setting="autoLockMin">${opt([1, 5, 15, 30, 60, 0], st.autoLockMin, v => v ? v + ' min di inattività' : 'Mai')}</select></label>
       <label class="lbl">Svuota gli appunti dopo<select data-setting="clipClearSec">${opt([15, 30, 60, 0], st.clipClearSec, v => v ? v + ' secondi' : 'Mai')}</select></label>
@@ -1296,7 +1346,7 @@ async function onClick(e) {
     case 'new': {
       S.view.edit = true; S.view.id = null; S.editAtt = [];
       const sec = S.view.section;
-      S.view.newType = types()[sec] && sec !== 'passkey' ? sec : null;
+      S.view.newType = !sec.startsWith('tag:') && types()[sec] && sec !== 'passkey' ? sec : null;
       renderMain();
       break;
     }
@@ -1350,6 +1400,7 @@ async function onClick(e) {
     case 'add-custom': $('#customList').insertAdjacentHTML('beforeend', customRow()); break;
     case 'del-custom': b.closest('.crow').remove(); break;
     case 'lock': lock(); break;
+    case 'shortcuts': showShortcuts(); break;
     case 'native': await Native.call(b.dataset.m); break;
     case 'sync':
       if (!hasAnySync()) { S.view = { ...S.view, section: 'settings', id: null, edit: false, newType: null }; renderMain(); } else { await syncNow(false); if (S.view.section === 'settings') renderMain(); }
@@ -1561,7 +1612,12 @@ async function onSubmit(e) {
 
 function onInput(e) {
   const t = e.target;
-  if (t.id === 'q') { S.view.q = t.value; $('#items').innerHTML = renderList(); return; }
+  if (t.id === 'q') {
+    S.view.q = t.value;
+    $('#items').innerHTML = renderList();
+    const n = $('.list-sub span'); if (n) n.textContent = visibleItems().length;
+    return;
+  }
   if (t.name === 'f_password' || t.name === 'pw' || t.name === 'nw') { updateMeter(t); return; }
   if (t.dataset.gen) {
     S.gen[t.dataset.gen] = t.type === 'checkbox' ? t.checked : +t.value;
@@ -1573,6 +1629,7 @@ function onInput(e) {
 async function onChange(e) {
   const t = e.target;
   if (t.id === 'vaultSel') { S.view.vault = t.value; S.view.id = null; renderMain(); return; }
+  if (t.id === 'sortSel') { S.settings.sort = t.value; saveSettings(); $('#items').innerHTML = renderList(); return; }
   if (t.dataset.role === 'prov') { t.closest('.cloudform').querySelector('[data-role=pf]').innerHTML = provFields(t.value); return; }
   if (t.dataset.setting) { S.settings[t.dataset.setting] = +t.value; saveSettings(); toast('Impostazione salvata'); return; }
   if (t.id === 'fileIn' && t.files[0]) {
@@ -1593,6 +1650,67 @@ async function onResume() {
   scheduleSync(300);
 }
 
+// ---------------------------------------------------------------- scorciatoie da tastiera
+const SHORTCUTS = [
+  ['Ctrl/⌘ + F', 'Cerca'], ['Ctrl/⌘ + N', 'Nuovo elemento'], ['Ctrl/⌘ + E', 'Modifica l\'elemento aperto'],
+  ['Ctrl/⌘ + S', 'Salva le modifiche'], ['Esc', 'Annulla la modifica o chiudi l\'elemento'], ['↑ / ↓', 'Elemento precedente / successivo'],
+  ['Ctrl/⌘ + B', 'Copia il nome utente'], ['Ctrl/⌘ + Maiusc + C', 'Copia la password'], ['Ctrl/⌘ + Maiusc + O', 'Copia il codice 2FA'],
+  ['Ctrl/⌘ + D', 'Aggiungi o togli dai preferiti'], ['Canc', 'Sposta nel cestino'], ['Ctrl/⌘ + L', 'Blocca Scrigno'], ['?', 'Mostra le scorciatoie'],
+];
+function showShortcuts() {
+  if ($('#scDlg')) return;
+  const d = document.createElement('dialog');
+  d.className = 'dlg wide';
+  d.id = 'scDlg';
+  d.innerHTML = `<div class="stack"><h3>Scorciatoie da tastiera</h3>
+    <table class="sc">${SHORTCUTS.map(([k, l]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(l)}</td></tr>`).join('')}</table>
+    <div class="row-btns end"><button class="btn primary" data-close>OK</button></div></div>`;
+  document.body.append(d);
+  d.addEventListener('click', e => { if (e.target.closest('[data-close]')) d.close(); });
+  d.addEventListener('close', () => d.remove());
+  d.showModal();
+}
+function onKey(e) {
+  if (!S.dek || document.querySelector('dialog[open]')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  const t = e.target;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  const k = e.key.toLowerCase();
+  const cur = S.view.id ? findItem(S.view.id) : null;
+  const click = sel => { const b = $(sel); if (b) { e.preventDefault(); b.click(); return true; } return false; };
+  if (mod && k === 'f') { const q = $('#q'); if (!q) { S.view = { ...S.view, section: 'all', id: null, edit: false }; renderMain(); } e.preventDefault(); $('#q').focus(); $('#q').select(); return; }
+  if (mod && k === 'n' && !e.shiftKey) { e.preventDefault(); if (PAGES.includes(S.view.section)) S.view = { ...S.view, section: 'all' }; S.view.id = null; S.view.edit = true; S.editAtt = []; S.view.newType = null; renderMain(); return; }
+  if (mod && k === 's') { const f = $('#editForm') || $('#tplForm'); if (f) { e.preventDefault(); f.requestSubmit(); } return; }
+  if (mod && k === 'l') { e.preventDefault(); lock(); return; }
+  if (mod && k === 'e' && cur && !S.view.edit) { click('[data-act=edit]'); return; }
+  if (mod && k === 'd' && cur && !S.view.edit && !cur.trashed) { click('[data-act=fav]'); return; }
+  if (mod && k === 'b' && cur && !S.view.edit) { e.preventDefault(); copy(cur.f.username || cur.f.email || '', 'Nome utente copiato'); return; }
+  if (mod && e.shiftKey && k === 'c' && cur && !S.view.edit) { e.preventDefault(); copy(cur.f.password || '', 'Password copiata'); return; }
+  if (mod && e.shiftKey && k === 'o' && cur && cur.f.totp) { e.preventDefault(); totp(parseTotp(cur.f.totp)).then(c => copy(c, 'Codice copiato')); return; }
+  if (e.key === 'Escape') {
+    if (S.view.edit) { click('[data-act=cancel]'); return; }
+    if (S.view.id) { e.preventDefault(); S.view.id = null; renderMain(); return; }
+    if (typing && t.id === 'q' && t.value) { t.value = ''; S.view.q = ''; $('#items').innerHTML = renderList(); }
+    return;
+  }
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !S.view.edit && (!typing || t.id === 'q') && !PAGES.includes(S.view.section)) {
+    const list = visibleItems();
+    if (!list.length) return;
+    e.preventDefault();
+    let ix = list.findIndex(i => i.id === S.view.id);
+    ix = e.key === 'ArrowDown' ? Math.min(list.length - 1, ix + 1) : Math.max(0, ix - 1);
+    S.view.id = list[ix].id;
+    const keepSearch = t && t.id === 'q';
+    renderMain();
+    const row = $(`.row[data-id="${list[ix].id}"]`); if (row) row.scrollIntoView({ block: 'nearest' });
+    if (keepSearch) { const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    return;
+  }
+  if (typing) return;
+  if (e.key === 'Delete' && cur && !S.view.edit && !cur.trashed) { click('[data-act=delete]'); return; }
+  if (e.key === '?') { e.preventDefault(); showShortcuts(); }
+}
+
 // ---------------------------------------------------------------- avvio
 let lastAct = now();
 async function boot() {
@@ -1607,6 +1725,7 @@ async function boot() {
   document.addEventListener('submit', guard(onSubmit));
   document.addEventListener('input', onInput);
   document.addEventListener('change', guard(onChange));
+  document.addEventListener('keydown', e => { try { onKey(e); } catch (err) { toast(err.message); } });
   ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, () => { lastAct = now(); }, { passive: true }));
   setInterval(() => {
     if (S.dek && +S.settings.autoLockMin > 0 && now() - lastAct > S.settings.autoLockMin * 60000) lock();

@@ -23,6 +23,7 @@ Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Dr
 - **Monitoraggio 2FA e passkey**: indica i tuoi siti che offrono la verifica in due passaggi o le passkey e che non stai ancora usando (elenchi di 2fa.directory).
 - **Keyfile**: un file da tenere su chiavetta o telefono, richiesto oltre alla master password.
 - **Cestino** (30 giorni) e **cronologia delle password**.
+- **Tag** (le cartelle di Enpass diventano tag all'importazione), ordinamento dell'elenco e **scorciatoie da tastiera** (premi `?`).
 - Codici 2FA integrati, generatore di password, importazione da Enpass/CSV, sblocco biometrico.
 
 ## Come è fatto

@@ -25,7 +25,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: |
           set -o pipefail
-          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && python3 tools/build_extension.py && node tests/extension.test.js; } 2>&1 | tee ci.log
+          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && node tests/layout.test.js && python3 tools/build_extension.py && node tests/extension.test.js; } 2>&1 | tee ci.log
       - if: failure()
         run: tools/ci_report.sh ci.log
 

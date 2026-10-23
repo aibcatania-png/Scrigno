@@ -238,6 +238,17 @@ function customTypes(items) {
 }
 function allTypes(items) { return { ...TYPES, ...customTypes(items || []) }; }
 
+// Tag: etichette libere, più d'una per elemento.
+function normTags(v) {
+  const list = Array.isArray(v) ? v : String(v || '').split(',');
+  return [...new Set(list.map(t => t.trim().replace(/\s+/g, ' ')).filter(Boolean))].slice(0, 20);
+}
+function allTags(items) {
+  const m = new Map();
+  for (const i of items) for (const t of i.tags || []) m.set(t, (m.get(t) || 0) + 1);
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'it'));
+}
+
 function makeItem(type, title, f, custom = [], fav = false) {
   const t = now();
   return { id: uuid(), type, title: (title || '').trim() || 'Senza titolo', f, custom, fav: !!fav,
@@ -414,6 +425,8 @@ function importEnpass(json) {
     identity: {}, note: {},
   };
   if (!Array.isArray(json.items)) throw new Error('File Enpass non riconosciuto: esporta in formato .json.');
+  // le cartelle di Enpass diventano tag
+  const folders = new Map((json.folders || []).map(fo => [fo.uuid, fo.title]));
   const out = [];
   for (const e of json.items) {
     if (e.trashed || e.archived) continue;
@@ -426,7 +439,10 @@ function importEnpass(json) {
       else custom.push({ label: fl.label || fl.type, value: fl.value, secret: !!fl.sensitive });
     }
     if (e.note) f.notes = e.note;
-    out.push(makeItem(type, e.title, f, custom, !!e.favorite));
+    const it = makeItem(type, e.title, f, custom, !!e.favorite);
+    const tags = (e.folders || []).map(id => folders.get(id)).filter(Boolean);
+    if (tags.length) it.tags = [...new Set(tags)];
+    out.push(it);
   }
   return out;
 }
