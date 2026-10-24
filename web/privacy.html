@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'">
+<title>Scrigno – privacy e termini</title>
+<link rel="stylesheet" href="styles.css">
+<style>.doc{max-width:720px;margin:32px auto;padding:0 16px;line-height:1.6}.doc h2{margin-top:28px}</style>
+</head>
+<body>
+<main class="doc">
+  <div class="brand big"><img src="icons/icon.svg" width="40" height="40" alt=""><span>Scrigno</span></div>
+  <h1>Informativa sulla privacy</h1>
+  <p>Scrigno è un gestore di password. Non ha server propri e non raccoglie, vende o condivide dati personali.</p>
+  <h2>Dove restano i dati</h2>
+  <p>Il vault (password, note, allegati) è cifrato sul tuo dispositivo con AES-256 e una chiave derivata dalla tua master password, che non lascia mai il dispositivo. I dati sono salvati sul dispositivo e, se lo scegli, sul tuo servizio cloud (Dropbox, OneDrive, Google Drive, WebDAV, iCloud Drive).</p>
+  <h2>Google Drive</h2>
+  <p>Se colleghi Google Drive, Scrigno usa solo l'ambito <code>drive.appdata</code>: legge e scrive esclusivamente il file del vault cifrato nella cartella privata dell'app sul tuo Drive. Non accede ad altri file. I dati ottenuti dalle API di Google sono usati solo per sincronizzare il vault tra i tuoi dispositivi, non vengono trasferiti a terzi e rispettano le Norme relative ai dati utente dei servizi API di Google, inclusi i requisiti di uso limitato.</p>
+  <p>Puoi revocare l'accesso in qualsiasi momento da Scrigno (Impostazioni › Cloud) o da myaccount.google.com › Sicurezza › App di terze parti.</p>
+  <h2>Servizi esterni facoltativi</h2>
+  <p>Il controllo delle password violate invia a Have I Been Pwned solo i primi 5 caratteri dell'hash SHA-1 della password (k-anonimato). Gli elenchi dei siti con 2FA e passkey sono scaricati da 2fa.directory senza inviare dati.</p>
+  <h1>Termini di servizio</h1>
+  <p>Scrigno è fornito “così com'è”, senza garanzie. La master password non è recuperabile: conservane una copia sicura e fai backup del vault. L'uso è gratuito.</p>
+  <h2>Contatti</h2>
+  <p>aibcatania@gmail.com</p>
+</main>
+</body>
+</html>
