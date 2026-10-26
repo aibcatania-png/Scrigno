@@ -72,6 +72,12 @@ function replaceItem(vid, item) {
   const ix = arr.findIndex(i => i.id === item.id);
   if (ix >= 0) arr[ix] = item; else arr.push(item);
 }
+async function setExtraCloud(v, cfg) {
+  v.cfg = cfg; v.err = null;
+  const key = S.items.find(i => i.id === v.keyId);
+  if (key) { key.f = { ...key.f, cloud: cfg ? JSON.stringify(cfg) : '' }; key.updated = now(); }
+  await saveVault();
+}
 async function saveVaultOf(vid) {
   if (vid === MAIN) return saveVault();
   const v = S.extra.find(x => x.id === vid);
@@ -129,7 +135,12 @@ async function loadExtras() {
   const next = [];
   for (const k of keys) {
     const have = S.extra.find(v => v.keyId === k.id);
-    if (have) { have.name = k.title; next.push(have); continue; }
+    if (have) {
+      have.name = k.title;
+      const kc = vaultCloudCfg(k);   // cloud cambiato da un altro dispositivo
+      if (stableCfg(kc) !== stableCfg(have.cfg)) have.cfg = kc;
+      next.push(have); continue;
+    }
     try { next.push(await openExtraVault(store, k)); } catch (e) { next.push({ id: k.f.vaultId, name: k.title, keyId: k.id, items: [], file: null, err: e.message }); }
   }
   S.extra = next;
@@ -1020,13 +1031,22 @@ function autofillCard() {
     <p class="hint">Nel browser usa l'estensione Scrigno; sul telefono e sul computer installa l'app Scrigno.</p></div>`;
 }
 
+// Cloud di un singolo vault aggiuntivo: può essere un servizio o un account diverso da quello del principale.
+function vaultCloudPanel(v) {
+  return `<div class="vcloud stack">
+    ${v.cfg ? `<p class="hint">“${esc(v.name)}” ora si sincronizza su <b>${PROVIDERS[v.cfg.provider].name}</b>${v.cfg.provider === 'gdrive' ? ` (app Google n. ${esc(String(v.cfg.clientId || '').split('-')[0])})` : ''}.</p>
+      <div class="row-btns">${OAUTH_PROVIDERS.includes(v.cfg.provider) ? '<button class="btn small" data-act="vault-cloud-reauth">Riconnetti</button>' : ''}<button class="btn small ghost" data-act="vault-cloud-off">Scollega il cloud</button></div>` : ''}
+    <p class="hint">${v.cfg ? 'Per spostarlo altrove' : 'Per sincronizzarlo'} scegli il servizio e accedi con l'account che vuoi: ${v.cfg ? 'il vault viene copiato lì e la copia precedente resta dov\'è.' : 'anche un account diverso da quello del vault principale.'} Su Google Drive Google ti fa scegliere l'account.</p>
+    ${cloudForm('vault-cloud-connect', v.cfg ? 'Sposta su questo cloud' : 'Collega')}</div>`;
+}
 function vaultsCard() {
   const rows = [`<div class="vrow"><span class="rtext"><b>${esc(vaultName(MAIN))}</b><small>Vault principale · ${S.items.filter(isActive).length} elementi${S.sync ? ' · ' + PROVIDERS[S.sync.provider].name : ''}</small></span>
       <button class="icon" data-act="vault-rename" data-id="${MAIN}" title="Rinomina">${ic('edit')}</button></div>`,
     ...S.extra.map(v => `<div class="vrow"><span class="rtext"><b>${esc(v.name)}</b><small>${v.file ? v.items.filter(isActive).length + ' elementi' : 'non ancora scaricato su questo dispositivo'}${v.cfg ? ' · ' + PROVIDERS[v.cfg.provider].name : ' · solo su questo dispositivo'}${v.err ? ' · ⚠ ' + esc(v.err) : ''}</small></span>
       <button class="icon" data-act="vault-rename" data-id="${v.id}" title="Rinomina">${ic('edit')}</button>
+      <button class="icon" data-act="vault-cloud" data-id="${v.id}" title="Cloud di questo vault">${ic('cloud')}</button>
       <button class="icon" data-act="vault-export" data-id="${v.id}" title="Esporta backup">${ic('download')}</button>
-      <button class="icon" data-act="vault-remove" data-id="${v.id}" title="Rimuovi">${ic('x')}</button></div>`)];
+      <button class="icon" data-act="vault-remove" data-id="${v.id}" title="Rimuovi">${ic('x')}</button></div>${S.vaultCloud === v.id ? vaultCloudPanel(v) : ''}`)];
   return `<div class="card stack"><h3>Vault</h3>
     <p class="hint">Tieni separati, per esempio, Personale e Lavoro. Sbloccando il vault principale si aprono anche gli altri; ognuno ha la sua password e può stare su un cloud diverso.</p>
     <div class="vlist">${rows.join('')}</div>
@@ -1509,6 +1529,39 @@ async function onClick(e) {
       renderMain();
       break;
     }
+    case 'vault-cloud': S.vaultCloud = S.vaultCloud === b.dataset.id ? null : b.dataset.id; renderMain(); break;
+    case 'vault-cloud-connect': {
+      const v = S.extra.find(x => x.id === S.vaultCloud);
+      if (!v || !v.file) throw new Error('Questo vault non è ancora su questo dispositivo: sincronizza prima.');
+      const c = cloudCfgForFile(await connectCloud(readCloudForm(b.closest('.cloudform'))), `scrigno-${v.id}.json`);
+      const P = PROVIDERS[c.provider];
+      const remote = await P.download(c);
+      if (remote && remote.vaultId !== v.file.vaultId) {
+        if (!confirm(`In questo cloud c'è già un altro file per “${v.name}”. Sostituirlo con il vault di questo dispositivo?`)) return;
+      }
+      if (!remote || remote.vaultId !== v.file.vaultId) await P.upload(c, v.file);
+      await setExtraCloud(v, c);
+      toast(`“${v.name}” collegato a ${P.name}`);
+      await syncNow(false);
+      renderMain();
+      break;
+    }
+    case 'vault-cloud-reauth': {
+      const v = S.extra.find(x => x.id === S.vaultCloud);
+      const o = v.cfg;
+      const c = await connectCloud({ provider: o.provider, clientId: o.clientId, clientSecret: o.clientSecret, appKey: o.appKey });
+      await setExtraCloud(v, { ...o, access: c.access, exp: c.exp, refresh: c.refresh || o.refresh, clientSecret: c.clientSecret || o.clientSecret });
+      await syncNow(false);
+      renderMain();
+      break;
+    }
+    case 'vault-cloud-off': {
+      const v = S.extra.find(x => x.id === S.vaultCloud);
+      if (!confirm(`Scollegare il cloud di “${v.name}”? Il file nel cloud resta dov'è e il vault resta su questo dispositivo.`)) return;
+      await setExtraCloud(v, null);
+      renderMain();
+      break;
+    }
     case 'vault-export': {
       const v = S.extra.find(x => x.id === b.dataset.id);
       if (!v.file) throw new Error('Questo vault non è ancora su questo dispositivo');
@@ -1579,7 +1632,7 @@ async function onClick(e) {
       const c = await connectCloud({ provider: old.provider, clientId: old.clientId, clientSecret: old.clientSecret, appKey: old.appKey });
       await saveSyncCfg({ ...old, ...c });
       // aggiorna anche i vault aggiuntivi sullo stesso servizio
-      for (const v of S.extra) if (v.cfg && v.cfg.provider === c.provider) Object.assign(v.cfg, { access: c.access, exp: c.exp, refresh: c.refresh || v.cfg.refresh, clientSecret: c.clientSecret || v.cfg.clientSecret });
+      for (const v of S.extra) if (v.cfg && v.cfg.provider === c.provider && (!v.cfg.refresh || v.cfg.refresh === old.refresh)) Object.assign(v.cfg, { access: c.access, exp: c.exp, refresh: c.refresh || v.cfg.refresh, clientSecret: c.clientSecret || v.cfg.clientSecret });
       S.syncErr = null;
       await syncNow(false);
       renderMain();

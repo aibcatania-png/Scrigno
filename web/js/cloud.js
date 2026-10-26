@@ -146,7 +146,7 @@ const GDrive = {
     const redirect = Cloud.env.redirect();
     if (!cfg.clientSecret) {
       const d = await Cloud.env.authorize(h, G_AUTH + '?' + new URLSearchParams({
-        client_id: cfg.clientId, redirect_uri: redirect, response_type: 'token', scope: G_SCOPE, state,
+        client_id: cfg.clientId, redirect_uri: redirect, response_type: 'token', scope: G_SCOPE, state, prompt: 'select_account',
       }), state);
       if (!d.access_token) throw new Error('Google non ha restituito l\'accesso.');
       return { provider: 'gdrive', clientId: cfg.clientId, access: d.access_token, exp: now() + (+d.expires_in || 3600) * 1000 - 60000 };
@@ -154,7 +154,7 @@ const GDrive = {
     const { verifier, challenge } = await pkcePair();
     const p = await Cloud.env.authorize(h, G_AUTH + '?' + new URLSearchParams({
       client_id: cfg.clientId, redirect_uri: redirect, response_type: 'code', scope: G_SCOPE, state,
-      access_type: 'offline', prompt: 'consent', code_challenge: challenge, code_challenge_method: 'S256',
+      access_type: 'offline', prompt: 'consent select_account', code_challenge: challenge, code_challenge_method: 'S256',
     }), state);
     if (!p.code) throw new Error('Google non ha restituito l\'autorizzazione.');
     const tok = await tokenRequest(G_TOKEN, { client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: 'authorization_code',

@@ -327,3 +327,4 @@ details.more[open] { display: flex; flex-direction: column; gap: 10px; }
 .genhist code { word-break: break-all; font-size: 13.5px; }
 .genhist .hint { grid-column: 1; font-size: 12px; }
 .genhist .icon { grid-row: 1 / span 2; grid-column: 2; }
+.vcloud { margin: 2px 0 10px; padding: 12px 14px; background: var(--panel2); border-radius: var(--r-s); }

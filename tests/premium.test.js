@@ -112,6 +112,27 @@ const PW = 'una-frase-molto-lunga-42';
   await page.selectOption('#vaultSel', 'all');
   ok((await page.textContent('#items')).includes('Lavoro'), 'elemento nel vault Lavoro');
 
+  // cloud di un singolo vault (qui WebDAV finto)
+  const dav = new Map();
+  await ctx.route('https://dav.test/**', async r => {
+    const u = r.request().url(), m = r.request().method();
+    const h = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,PUT,OPTIONS' };
+    if (m === 'OPTIONS') return r.fulfill({ status: 204, headers: h });
+    if (m === 'PUT') { dav.set(u, r.request().postData()); return r.fulfill({ status: 201, headers: h, body: '' }); }
+    return dav.has(u) ? r.fulfill({ status: 200, headers: h, contentType: 'application/json', body: dav.get(u) }) : r.fulfill({ status: 404, headers: h, body: '' });
+  });
+  await page.click('[data-act=section][data-k=settings]');
+  await page.click('.vrow:has-text("Lavoro") [data-act=vault-cloud]');
+  await page.selectOption('.vcloud [data-role=prov]', 'webdav');
+  await page.fill('.vcloud [data-c=url]', 'https://dav.test/u/scrigno-vault.json');
+  await page.fill('.vcloud [data-c=user]', 'u');
+  await page.fill('.vcloud [data-c=pass]', 'p');
+  await page.click('[data-act=vault-cloud-connect]');
+  await page.waitForSelector('.vrow:has-text("Lavoro") >> text=WebDAV');
+  const davKeys = [...dav.keys()];
+  ok(davKeys.length === 1 && /scrigno-[\w]+\.json$/.test(davKeys[0]) && !davKeys[0].endsWith('scrigno-vault.json') && JSON.parse(dav.get(davKeys[0])).format === 'scrigno',
+    'vault aggiuntivo spostato su un cloud suo ' + davKeys.join(','));
+
   // keyfile
   await page.click('[data-act=section][data-k=settings]');
   const dlP = page.waitForEvent('download');

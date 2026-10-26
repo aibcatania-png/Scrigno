@@ -48,7 +48,12 @@ async function loadExtras() {
   const next = [];
   for (const k of vaultKeyItems(B.items)) {
     const have = B.extra.find(v => v.keyId === k.id);
-    if (have) { have.name = k.title; next.push(have); continue; }
+    if (have) {
+      have.name = k.title;
+      const kc = vaultCloudCfg(k);
+      if (stableCfg(kc) !== stableCfg(have.cfg)) have.cfg = kc;
+      next.push(have); continue;
+    }
     try { next.push(await openExtraVault(local, k)); } catch { /* vault non leggibile */ }
   }
   B.extra = next;
