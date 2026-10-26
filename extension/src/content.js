@@ -92,7 +92,8 @@
       .head svg { width: 16px; height: 16px; }
       button { all: unset; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
       button:hover, button.sel { background: #e3f0fc; }
-      .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; background: #1f78cc; }
+      .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; background: #1f78cc; position: relative; overflow: hidden; }
+      .ic img { position: absolute; inset: 0; width: 100%; height: 100%; padding: 4px; background: #fff; object-fit: contain; }
       .t { display: flex; flex-direction: column; min-width: 0; }
       .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .t small { color: #5d6c78; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -114,6 +115,7 @@
     return shadow;
   }
   const LOGO = '<svg viewBox="0 0 32 32"><rect x="1" y="1" width="30" height="30" rx="8" fill="#1f78cc"/><path d="M11 14.5v-3a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><rect x="8.5" y="14.5" width="15" height="10.5" rx="2.5" fill="#fff"/></svg>';
+  const favHost = u => { try { const h = new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(h) ? h : ''; } catch { return ''; } };
   const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let menu = null, menuFor = null, menuItems = [], sel = -1;
@@ -139,7 +141,7 @@
         m.logins.filter(l => l.hasTotp).forEach(l => entries.push({ icon: '⏱', title: 'Codice 2FA', sub: l.title, run: () => fill(l.id, field, true) }));
       } else {
         for (const c of condCandidates) entries.push({ icon: '🔐', title: c.username || c.title, sub: 'Passkey · ' + c.title, run: () => usePasskey(c.id) });
-        m.logins.forEach(l => entries.push({ letter: (l.title || '?')[0].toUpperCase(), title: l.title, sub: l.username, run: () => fill(l.id, field, false) }));
+        m.logins.forEach(l => entries.push({ letter: (l.title || '?')[0].toUpperCase(), fav: m.favicons ? favHost(l.url) : '', title: l.title, sub: l.username, run: () => fill(l.id, field, false) }));
         if (kind === 'newpw' || (kind === 'pw' && loginFields(formOf(field)).newPw)) {
           entries.push({ icon: '🎲', title: 'Genera password sicura', sub: 'e compila i campi password', run: async () => {
             const pw = await send({ type: 'pageGenerate' });
@@ -154,7 +156,8 @@
     menu = document.createElement('div');
     menu.className = 'menu';
     menu.innerHTML = `<div class="head">${LOGO}Scrigno</div>` + entries.map((e, i) =>
-      `<button data-i="${i}"><span class="ic">${escH(e.icon || e.letter)}</span><span class="t"><b>${escH(e.title)}</b><small>${escH(e.sub || '')}</small></span></button>`).join('');
+      `<button data-i="${i}"><span class="ic">${escH(e.icon || e.letter)}${e.fav ? `<img src="https://icons.duckduckgo.com/ip3/${escH(e.fav)}.ico" alt="" referrerpolicy="no-referrer">` : ''}</span><span class="t"><b>${escH(e.title)}</b><small>${escH(e.sub || '')}</small></span></button>`).join('');
+    menu.querySelectorAll('img').forEach(i => i.addEventListener('error', () => i.remove()));
     menu.addEventListener('mousedown', ev => ev.preventDefault());
     menu.addEventListener('click', ev => {
       const b = ev.target.closest('button');
@@ -175,16 +178,53 @@
     const f = loginFields(formOf(field));
     const userEl = f.user || (classify(field) === 'user' ? field : null);
     if (userEl && d.username) setValue(userEl, d.username);
-    if (f.pw && d.password) setValue(f.pw, d.password);
-    else if (classify(field) === 'pw' && d.password) setValue(field, d.password);
+    const pwEl = f.pw || (classify(field) === 'pw' ? field : null);
+    if (pwEl && d.password) setValue(pwEl, d.password);
+    afterFill(id, d, pwEl || userEl);
+  }
+
+  // Dopo la compilazione: codice 2FA negli appunti e nel campo del codice, invio automatico del modulo.
+  let pendingOtp = null;
+  function afterFill(id, d, el) {
+    if (d.otp || d.totp) {
+      pendingOtp = { id, until: Date.now() + 180000, code: d.totp };
+      if (d.totp && navigator.clipboard) navigator.clipboard.writeText(d.totp).catch(() => {});
+      setTimeout(fillPendingOtp, 400);
+    }
+    if (d.autoSubmit && el) setTimeout(() => submitFrom(el), 350);
+  }
+  function submitFrom(el) {
+    const form = el.form || el.closest('form');
+    lastSubmit = 0;
+    captureFrom(formOf(el));
+    const btn = (form || document).querySelector('button[type=submit], input[type=submit], button:not([type])');
+    if (btn && visible(btn)) btn.click();
+    else if (form && form.requestSubmit) form.requestSubmit();
+    else el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  }
+  async function fillPendingOtp(target) {
+    if (!pendingOtp || Date.now() > pendingOtp.until) { pendingOtp = null; return false; }
+    const el = target || allInputs().find(isOtp);
+    if (!el || el.value) return false;
+    let code = pendingOtp.code;
+    if (pendingOtp.id) { try { code = (await send({ type: 'pageFill', id: pendingOtp.id, totpOnly: true })).totp || code; } catch { /* usa il codice già letto */ } }
+    if (!code) return false;
+    setValue(el, code);
+    pendingOtp = null;
+    return true;
   }
 
   // ------------------------------------------------------------ eventi sui campi
-  document.addEventListener('focusin', e => {
+  document.addEventListener('focusin', async e => {
     const el = e.composedPath()[0];
     const k = classify(el);
+    if (k === 'otp' && pendingOtp && await fillPendingOtp(el)) return;
     if (k) openMenu(el, k); else if (menuFor && el !== menuFor) closeMenu();
   }, true);
+  // Il campo del codice 2FA può comparire dopo (pagina successiva o modulo dinamico).
+  new MutationObserver(() => { if (pendingOtp) fillPendingOtp(); }).observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState !== 'loading') setTimeout(() => send({ type: 'pagePendingOtp' }).then(p => { if (p) { pendingOtp = { ...p, until: Date.now() + 120000 }; fillPendingOtp(); } }).catch(() => {}), 600);
+  else document.addEventListener('DOMContentLoaded', () => setTimeout(() => send({ type: 'pagePendingOtp' }).then(p => { if (p) { pendingOtp = { ...p, until: Date.now() + 120000 }; fillPendingOtp(); } }).catch(() => {}), 600));
   document.addEventListener('click', e => {
     const el = e.composedPath()[0];
     if (el === menuFor) return;
@@ -262,6 +302,7 @@
       const f = loginFields();
       if (f.user && msg.username) setValue(f.user, msg.username);
       if (f.pw && msg.password) setValue(f.pw, msg.password);
+      afterFill(null, { totp: msg.totp, otp: !!msg.totp, autoSubmit: msg.autoSubmit }, f.pw || f.user);
       respond(!!(f.user || f.pw));
     } else if (msg.type === 'openMenu') {
       const f = loginFields();

@@ -26,6 +26,11 @@ Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Dr
 - **Cestino** (30 giorni) e **cronologia delle password**.
 - **Tag** (le cartelle di Enpass diventano tag all'importazione), ordinamento dell'elenco e **scorciatoie da tastiera** (premi `?`).
 - **Generatore di password come Enpass**: casuale (4–100 caratteri, maiuscole, cifre e simboli con un minimo per ciascuno, caratteri ambigui, caratteri da escludere) o **pronunciabile** (2–12 parole italiane o inglesi, separatore a scelta, iniziali maiuscole, una cifra), caratteri colorati, forza in bit e **cronologia** delle password generate, cifrata nel vault.
+- **Impostazioni come Enpass**, divise in Generali, Vault, Sicurezza, Personalizza, Compilazione automatica, Backup, Avanzate e Informazioni:
+  - tema chiaro/scuro/di sistema, **icone dei siti** (da DuckDuckGo), contatori e sottotitoli facoltativi, soglia delle password vecchie;
+  - **PIN** di sblocco (5 tentativi), blocco quando lo schermo si blocca, il sistema va in sospensione, cambia utente, la finestra si chiude o il sistema è inattivo; svuotamento degli appunti; campi sensibili visibili o nascosti;
+  - compilazione: accesso automatico, codice 2FA copiato e inserito, compilazione senza chiedere con un solo login, corrispondenza esatta dell'indirizzo, siti ignorati (salvati nel vault, validi per estensione, Android e altri dispositivi);
+  - **backup automatici** cifrati (giornalieri, con ripristino), avvio con il sistema e area di notifica sul computer, scorciatoia Auto-Type configurabile, avviso di aggiornamento.
 - Codici 2FA integrati, importazione da Enpass/CSV, sblocco biometrico.
 
 ## Come è fatto

@@ -51,12 +51,15 @@ object Vault {
         return if (url.startsWith("androidapp://")) url.removePrefix("androidapp://") else null
     }
 
-    fun matchLogins(all: List<JSONObject>, host: String?, pkg: String?): List<JSONObject> {
+    /** exact: il sito deve coincidere con l'indirizzo salvato (es. account.esempio.com ≠ esempio.com). */
+    fun matchLogins(all: List<JSONObject>, host: String?, pkg: String?, exact: Boolean = false): List<JSONObject> {
         val bd = if (!host.isNullOrEmpty()) baseDomain(host) else ""
+        val h = host?.lowercase()?.removePrefix("www.") ?: ""
         return all.filter { it.optString("type") == "login" }.filter {
             if (pkg != null && appOf(it) == pkg) return@filter true
             val url = field(it, "url")
-            bd.isNotEmpty() && url.isNotEmpty() && baseDomain(hostOf(url)) == bd
+            if (bd.isEmpty() || url.isEmpty()) return@filter false
+            if (exact) hostOf(url).removePrefix("www.") == h else baseDomain(hostOf(url)) == bd
         }
     }
 

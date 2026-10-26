@@ -95,9 +95,11 @@ function renderLock() {
     <button class="btn danger" data-a="wipe">Rimuovi il vault da questo browser</button></div>`;
 }
 
+const favHost = u => { try { const h = new URL(/^[a-z]+:\/\//i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(h) ? h : ''; } catch { return ''; } };
 function itemRow(i) {
   const ch = (i.title || '?')[0].toUpperCase();
-  return `<div class="item"><span class="ic" style="background:hsl(${hue(i.title)} 45% 42%)">${esc(ch)}</span>
+  const fh = ST.settings.favicons !== false && i.url && !/^androidapp:/.test(i.url) ? favHost(i.url) : '';
+  return `<div class="item"><span class="ic" style="background:hsl(${hue(i.title)} 45% 42%)">${esc(ch)}${fh ? `<img class="favimg" src="https://icons.duckduckgo.com/ip3/${esc(fh)}.ico" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</span>
     <span class="t"><b>${esc(i.title)}</b><small>${esc(i.sub)}</small></span>
     <span class="acts">
       ${i.match && i.hasPw ? `<button class="fillbtn" data-a="fill" data-id="${i.id}">Compila</button>` : ''}
@@ -126,6 +128,8 @@ function renderUnlocked() {
       ${ST.sync ? `<p>Collegato a <b>${esc(ST.sync.name)}</b>${ST.syncErr ? `<br><span class="err">${esc(ST.syncErr)}</span>` : ''}</p>
         <div class="row"><button class="btn pri" data-a="sync">Sincronizza ora</button><button class="btn" data-a="disconnect">Disconnetti</button></div>` : ''}</div>
       ${ST.sync ? '' : cloudForm('connect', 'Connetti')}
+      <div class="card" id="afBox"><h2>Compilazione automatica</h2><p class="hint">Caricamento…</p></div>
+      <div class="card"><h2>Aspetto</h2><label class="chk"><input type="checkbox" id="favOn" ${ST.settings.favicons !== false ? 'checked' : ''}> Icone dei siti web (da DuckDuckGo)</label></div>
       <div class="card"><h2>Blocco automatico</h2><select id="autolock">${[5, 15, 30, 60, 240, 0].map(v => `<option value="${v}" ${ST.settings.autoLockMin === v ? 'selected' : ''}>${v ? 'Dopo ' + v + ' min' : 'Mai'}</option>`).join('')}</select>
         <p class="hint">Il vault si blocca comunque alla chiusura del browser.</p></div>
       <div class="card"><h2>Importa</h2><div class="row"><button class="btn" data-a="pick" data-k="enpass">Da Enpass (.json)</button><button class="btn" data-a="pick" data-k="csv">Da CSV</button></div></div>
@@ -140,6 +144,17 @@ function render() {
   if ($('#mp')) $('#mp').focus();
   if ($('#q')) $('#q').focus();
   if ($('#genBox')) renderGen();
+  if ($('#afBox')) renderAf();
+}
+
+const AF_LABELS = [['autoSubmit', 'Accedi automaticamente dopo la compilazione'], ['otpCopy', 'Copia e inserisci il codice 2FA'],
+  ['fillSingle', 'Scorciatoia: compila subito se c\'è un solo login'], ['exactMatch', 'Corrispondenza esatta con l\'indirizzo del sito'],
+  ['lockedSuggest', 'Suggerimenti anche quando è bloccato'], ['askSave', 'Chiedi se salvare i login nuovi']];
+async function renderAf() {
+  const p = await send({ type: 'afGet' });
+  $('#afBox').innerHTML = `<h2>Compilazione automatica</h2>${AF_LABELS.map(([k, l]) => `<label class="chk"><input type="checkbox" data-af="${k}" ${p[k] ? 'checked' : ''}> ${l}</label>`).join('')}
+    <div class="lbl">Siti ignorati</div>${p.ignore.length ? p.ignore.map(d => `<div class="hrow"><span>${esc(d)}</span><button class="btn sm" data-a="unignore" data-d="${esc(d)}">Rimuovi</button></div>`).join('') : '<p class="hint">Nessuno. Scegli “Mai per questo sito” quando Scrigno propone di salvare un login.</p>'}
+    <p class="hint">Valgono anche per l'app e gli altri dispositivi.</p>`;
 }
 
 // ---------------------------------------------------------------- generatore (come nella app)
@@ -188,6 +203,7 @@ document.addEventListener('click', async e => {
       case 'gmode': await genSet({ mode: b.dataset.k }); break;
       case 'gstep': await genSet({ [b.dataset.k]: Math.max(1, Math.min(20, GS.opts[b.dataset.k] + +b.dataset.d)) }); break;
       case 'ghist': await copyText(GS.history[+b.dataset.i].pw); break;
+      case 'unignore': { const p = await send({ type: 'afGet' }); await send({ type: 'afSet', patch: { ignore: p.ignore.filter(d => d !== b.dataset.d) } }); await renderAf(); break; }
       case 'sync': b.disabled = true; await send({ type: 'syncNow' }); toast('Sincronizzato'); await refresh(); break;
       case 'disconnect': if (confirm('Scollegare il cloud?')) { await send({ type: 'disconnect' }); await refresh(); } break;
       case 'connect': b.disabled = true; b.textContent = 'Accesso…'; await send({ type: 'connect', cfg: readCloud(), mode: 'link' }); toast('Cloud collegato'); await refresh(); break;
@@ -222,6 +238,8 @@ document.addEventListener('change', async e => {
   const t = e.target;
   try {
     if (t.id === 'prov') $('#pf').innerHTML = providerFields(t.value);
+    if (t.dataset.af) { await send({ type: 'afSet', patch: { [t.dataset.af]: t.checked } }); toast('Salvato'); }
+    if (t.id === 'favOn') { await send({ type: 'settings', settings: { favicons: t.checked } }); ST.settings.favicons = t.checked; toast('Salvato'); }
     if (t.dataset.g) await genSet({ [t.dataset.g]: t.type === 'checkbox' ? t.checked : t.type === 'range' ? +t.value : t.value });
     if (t.id === 'autolock') { await send({ type: 'settings', settings: { autoLockMin: +t.value } }); toast('Salvato'); }
     if (t.id === 'fileIn' && t.files[0]) {
@@ -239,3 +257,5 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.id === 'q') { const b = document.querySelector('.fillbtn'); if (b) b.click(); }
 });
 refresh().catch(e => { document.body.textContent = e.message; });
+
+document.addEventListener('error', e => { if (e.target && e.target.classList && e.target.classList.contains('favimg')) e.target.remove(); }, true);

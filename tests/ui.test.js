@@ -64,11 +64,17 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
       await page.click(`[data-act=section][data-k=${s}]`);
       await page.waitForSelector('.pagewrap');
     }
-    ok(await page.isVisible('text=Sincronizzazione cloud'), `${mode}: impostazioni`);
+    ok(await page.isVisible('.stabs [data-k=general].on'), `${mode}: impostazioni a sezioni`);
+    for (const t of ['general', 'security', 'look', 'autofill', 'backup', 'advanced', 'about', 'vault']) {
+      await page.click(`.stabs [data-k=${t}]`);
+      await page.waitForSelector(`.stabs [data-k=${t}].on`);
+    }
+    ok(await page.isVisible('text=Sincronizzazione del vault principale'), `${mode}: sezione Vault`);
     const provs = await page.$$eval('[data-role=prov] option', o => o.map(x => x.value));
     ok(provs.includes('onedrive') && provs.includes('dropbox'), `${mode}: servizi cloud ${provs.join(',')}`);
     await page.selectOption('[data-role=prov]', 'onedrive');
     ok(await page.isVisible('input[data-c=clientId]'), `${mode}: campi OneDrive`);
+    await page.click('.stabs [data-k=autofill]');
     if (mode === 'android') {
       ok(await page.isVisible('text=Imposta compilazione automatica'), 'android: scheda compilazione automatica');
       const calls = await page.evaluate(() => window.__calls);

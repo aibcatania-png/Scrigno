@@ -42,7 +42,7 @@ class AutofillActivity : UnlockActivity() {
         }
         val items = Repo.items(this, dek)
         val logins = items.filter { it.optString("type") == "login" }.sortedBy { it.optString("title").lowercase() }
-        val preferred = Vault.matchLogins(items, target.webDomain, target.matchPkg)
+        val preferred = Vault.matchLogins(items, target.webDomain, target.matchPkg, app.scrigno.AfPrefs.load(this).exactMatch)
         val where = target.webDomain ?: Fill.appLabel(this, target.pkg) ?: target.pkg
         showPicker("Scegli un login", where, logins, preferred,
             { it.optString("title") + Vault.field(it, "username").let { u -> if (u.isEmpty()) "" else " · $u" } }) { item ->

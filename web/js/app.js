@@ -32,7 +32,7 @@ const S = {
 };
 
 function loadSettings() {
-  const def = { autoLockMin: 5, clipClearSec: 30, mainName: 'Personale', sort: 'az' };
+  const def = { ...SETTINGS_DEFAULT };
   try { return { ...def, ...JSON.parse(localStorage.getItem('scrigno-settings') || '{}') }; } catch { return def; }
 }
 function saveSettings() {
@@ -151,6 +151,7 @@ function lock() {
   S.dek = null; S.items = []; S.extra = []; S.sync = null; S.syncErr = null; S.syncState = 'idle';
   S.view = { section: 'all', id: null, edit: false, q: '', newType: null, vault: 'all' };
   S.genVal = ''; S.kf = null; S.editAtt = []; S.tplEdit = null; S.pwned = null; S.pwnedChecked = false;
+  S.lockMode = null; S.pwOpen = false; S.pinSetup = false;
   if (Native.available) Native.call('lock').catch(() => {});
   render();
 }
@@ -399,12 +400,13 @@ function setSync(st) {
 // ---------------------------------------------------------------- interfaccia
 const PAGES = ['audit', 'gen', 'settings', 'template'];
 const BASE_SECTIONS = ['login', 'card', 'identity', 'note', 'passkey'];
+const isOldPw = i => !!S.settings.auditOld && now() - (i.pwChanged || i.created) > (+S.settings.oldYears || 1) * 365 * 864e5;
 function issueCount() {
   const logins = allLive().filter(i => i.f && i.f.password);
   const counts = new Map();
   logins.forEach(i => counts.set(i.f.password, (counts.get(i.f.password) || 0) + 1));
   return logins.filter(i => strength(i.f.password).lvl <= 1 || counts.get(i.f.password) > 1 ||
-    now() - (i.pwChanged || i.created) > 365 * 864e5 || (S.pwned && S.pwned.get(i.id))).length;
+    isOldPw(i) || (S.pwned && S.pwned.get(i.id))).length;
 }
 // Barra laterale: [chiave, etichetta, icona] oppure ['-h', titolo del gruppo].
 function sections() {
@@ -448,7 +450,7 @@ function hue(s) { let h = 0; for (const c of s) h = (h * 31 + c.codePointAt(0)) 
 const TILE = ['#2F80C9', '#3A6EA5', '#2B9BB0', '#5468C4', '#3D8F7A', '#7A5BB8', '#C0703A', '#B5506A', '#4F7A93', '#6B8E3D'];
 function letterIcon(it, big = false) {
   const ch = (it.title || '?').trim().charAt(0).toUpperCase() || '?';
-  return `<span class="ricon${big ? ' big' : ''}" style="--tile:${TILE[hue(it.title || '') % TILE.length]}">${esc(ch)}</span>`;
+  return `<span class="ricon${big ? ' big' : ''}" style="--tile:${TILE[hue(it.title || '') % TILE.length]}">${esc(ch)}${faviconImg(it)}</span>`;
 }
 const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 
@@ -500,6 +502,14 @@ function keyfileRow() {
 }
 
 function renderLock() {
+  if (S.pin && S.lockMode !== 'master') {
+    $('#app').innerHTML = `<div class="center"><div class="card auth"><div class="brand big">${LOGO}<span>Scrigno</span></div>
+      ${pinLockForm()}
+      ${S.bio ? `<button class="btn wide" data-act="bio-unlock">${ic('fingerprint')} Sblocca con la biometria</button>` : ''}
+      ${S.autotype ? '<p class="hint">Sblocca per compilare nell\'app in primo piano.</p>' : ''}</div></div>`;
+    const pi = $('#pinIn'); if (pi) pi.focus();
+    return;
+  }
   $('#app').innerHTML = `<div class="center"><div class="card auth">
     <div class="brand big">${LOGO}<span>Scrigno</span></div>
     <form id="unlockForm" class="stack">
@@ -525,7 +535,7 @@ function inSection(i, k) {
 }
 function countFor(k) {
   if (k === 'audit') { const n = issueCount(); return n ? `<span class="cnt warn">${n}</span>` : ''; }
-  if (PAGES.includes(k)) return '';
+  if (PAGES.includes(k) || !S.settings.showCounts) return '';
   const list = k === 'trash' ? trashedItems() : live().filter(i => inSection(i, k));
   return list.length ? `<span class="cnt">${list.length}</span>` : '';
 }
@@ -549,7 +559,7 @@ function renderMain() {
       ${vaultPicker()}
       <nav>${sections().map(([k, l, i]) => k === '-h' ? `<div class="nav-h">${esc(l)}</div>`
         : `<button class="nav-btn ${v.section === k ? 'on' : ''}" data-act="section" data-k="${esc(k)}" title="${esc(l)}"><span class="ni">${i}</span><span class="nl">${esc(l)}</span>${countFor(k)}</button>`).join('')}</nav>
-      <div class="nav-foot">
+      <div class="nav-foot">${updateBanner()}
         <button class="nav-btn ${v.section === 'settings' ? 'on' : ''}" data-act="section" data-k="settings" title="Impostazioni"><span class="ni">${ic('settings')}</span><span class="nl">Impostazioni</span></button>
         <div class="nav-row">
           <button class="sync-pill" id="syncPill" data-act="sync" data-state="${S.syncState}" title="Sincronizzazione">${syncLabel()}</button>
@@ -575,7 +585,7 @@ function renderMain() {
 function visibleItems() {
   const { section, q } = S.view;
   const ql = q.trim().toLowerCase();
-  const base = section === 'trash' ? trashedItems() : live().filter(i => inSection(i, section));
+  const base = section === 'trash' ? trashedItems() : live().filter(i => (ql && S.settings.searchAll) || inSection(i, section));
   const sort = S.settings.sort || 'az';
   const cmp = {
     az: (a, b) => a.title.localeCompare(b.title, 'it'),
@@ -603,7 +613,7 @@ function renderList() {
   }
   const many = S.extra.length && S.view.vault === 'all';
   return items.map(i => `<button class="row ${S.view.id === i.id ? 'on' : ''}" data-act="open" data-id="${i.id}">
-      ${letterIcon(i)}<span class="rtext"><b>${esc(i.title)}</b><small>${esc(subtitle(i))}${many && vaultOf(i.id) !== MAIN ? ' · ' + esc(vaultName(vaultOf(i.id))) : ''}</small></span>
+      ${letterIcon(i)}<span class="rtext"><b>${esc(i.title)}</b>${S.settings.showSubtitles || (many && vaultOf(i.id) !== MAIN) ? `<small>${S.settings.showSubtitles ? esc(subtitle(i)) : ''}${many && vaultOf(i.id) !== MAIN ? (S.settings.showSubtitles ? ' · ' : '') + esc(vaultName(vaultOf(i.id))) : ''}</small>` : ''}</span>
       ${(i.attachments || []).length ? `<span class="clip" title="Allegati">${ic('clip')}</span>` : ''}${i.fav ? `<span class="star" title="Preferito">${ic('starFill')}</span>` : ''}
     </button>`).join('');
 }
@@ -616,7 +626,8 @@ function fieldRow(it, k, label, kind, val = getVal(it, k)) {
   }
   const secret = !!kind && kind.startsWith('secret');
   const multi = kind === 'multi' || kind === 'secret-multi';
-  let shown = secret ? '••••••••' : esc(val);
+  const open = secret && !S.settings.hideSecrets;
+  let shown = secret && !open ? '••••••••' : esc(val);
   if (kind === 'url') shown = `<a href="${esc(safeUrl(val))}" target="_blank" rel="noopener noreferrer" data-act="open-url">${esc(val)}</a>`;
   let badge = '';
   if (k === 'password') {
@@ -626,7 +637,7 @@ function fieldRow(it, k, label, kind, val = getVal(it, k)) {
     if (pw) badge += ` <span class="badge l1">Violata ${pw.toLocaleString('it-IT')} volte</span>`;
   }
   return `<div class="field"><label>${esc(label)}${badge}</label><div class="fv">
-    <span class="val ${multi ? 'multi' : ''} ${secret ? 'mono' : ''}">${shown}</span>
+    <span class="val ${multi ? 'multi' : ''} ${secret ? 'mono' : ''}"${open ? ' data-shown="1"' : ''}>${shown}</span>
     ${secret ? `<button class="icon" data-act="reveal" data-k="${k}" title="Mostra">${ic('eye')}</button>` : ''}
     <button class="icon" data-act="copy" data-k="${k}" title="Copia">${ic('copy')}</button></div></div>`;
 }
@@ -828,7 +839,7 @@ function renderAudit() {
   const counts = new Map();
   logins.forEach(i => counts.set(i.f.password, (counts.get(i.f.password) || 0) + 1));
   const reused = logins.filter(i => counts.get(i.f.password) > 1);
-  const old = logins.filter(i => now() - (i.pwChanged || i.created) > 365 * 864e5);
+  const old = logins.filter(isOldPw);
   const breached = S.pwned ? logins.filter(i => S.pwned.get(i.id)) : [];
   const bad = new Set([...weak, ...reused, ...old, ...breached].map(i => i.id));
   const score = logins.length ? Math.round(100 * (1 - bad.size / logins.length)) : 100;
@@ -1020,7 +1031,7 @@ function autofillCard() {
       <button class="btn left" data-act="native" data-m="openAutofillSettings">Apri Impostazioni</button></div>`;
   }
   if (Native.desktop) {
-    const keys = Native.platform === 'darwin' ? '⌘ ⌥ A' : 'Ctrl Alt A';
+    const keys = (Native.platform === 'darwin' ? '⌘ ⌥ ' : 'Ctrl Alt ') + (S.settings.hotkey || 'A');
     return `<div class="card stack"><h3>Compilazione automatica</h3>
       <p class="hint"><b>Nei siti:</b> installa l'estensione Scrigno per Chrome, Edge o Firefox. Compila i login, salva quelli nuovi e gestisce le passkey.</p>
       <p class="hint"><b>Nelle app:</b> metti il cursore nel campo utente e premi <b>${keys}</b>. Scrigno ti fa scegliere il login e lo digita al posto tuo.
@@ -1085,56 +1096,6 @@ function keyfileCard() {
   </div>`;
 }
 
-function renderSettings() {
-  const st = S.settings, sy = S.sync;
-  const opt = (vals, cur, fmt) => vals.map(v => `<option value="${v}" ${+cur === v ? 'selected' : ''}>${fmt(v)}</option>`).join('');
-  const reauth = sy && ['gdrive', 'onedrive', 'dropbox'].includes(sy.provider);
-  return `<div class="pagewrap"><h1>Impostazioni</h1>
-    <div class="card stack"><h3>Sincronizzazione cloud</h3>
-      ${sy ? `<p>Collegato a <b>${PROVIDERS[sy.provider].name}</b>${sy.label ? ` (${esc(sy.label)})` : ''}${sy.lastSync ? ` · ultima sincronizzazione ${fmtDate(sy.lastSync)}` : ''}</p>
-        ${sy.provider === 'gdrive' ? `<p class="hint">App Google n. <b>${esc(String(sy.clientId || '').split('-')[0])}</b> · ${sy.refresh && sy.clientSecret ? 'accesso permanente' : 'accesso da rinnovare ogni ora (manca il client secret)'}. Tutti i dispositivi devono usare la stessa app Google: con un Client ID diverso Google Drive mostra un'altra cartella privata.</p>` : ''}
-        ${S.syncErr ? `<p class="err">${esc(S.syncErr.message)}</p>` : ''}
-        <div class="row-btns"><button class="btn primary" data-act="sync">Sincronizza ora</button>
-          ${reauth ? '<button class="btn" data-act="reauth">Riconnetti</button>' : ''}
-          ${S.syncErr && S.syncErr.code === 'other-vault' ? '<button class="btn danger" data-act="cloud-overwrite">Sovrascrivi il cloud con questo vault</button>' : ''}
-          <button class="btn ghost" data-act="cloud-off">Disconnetti</button></div>`
-      : `<p class="hint">Il vault viene caricato già cifrato: il servizio cloud vede solo dati illeggibili.</p>${cloudForm('connect-cloud', 'Connetti')}`}
-    </div>
-    ${vaultsCard()}
-    ${autofillCard()}
-    ${templatesCard()}
-    <div class="card stack"><h3>Sblocco biometrico</h3>
-      ${S.bio ? '<p>Attivo su questo dispositivo.</p><button class="btn left" data-act="bio-off">Disattiva</button>'
-        : S.bioAvail ? '<p class="hint">Usa impronta o volto per sbloccare su questo dispositivo, anche durante la compilazione automatica. Sugli altri dispositivi resta necessaria la master password.</p><button class="btn primary left" data-act="bio-on">Attiva</button>'
-        : '<p class="hint">Non disponibile su questo dispositivo.</p>'}
-    </div>
-    ${keyfileCard()}
-    <div class="card stack"><h3>Scorciatoie da tastiera</h3>
-      <p class="hint">Sul computer: Ctrl (⌘ su Mac) + F per cercare, + N per un nuovo elemento, + E per modificare, + S per salvare, + L per bloccare. Premi <kbd>?</kbd> per l'elenco completo.</p>
-      <button class="btn left" data-act="shortcuts">Mostra tutte le scorciatoie</button></div>
-    <div class="card stack"><h3>Blocco e appunti</h3>
-      <label class="lbl">Blocca automaticamente dopo<select data-setting="autoLockMin">${opt([1, 5, 15, 30, 60, 0], st.autoLockMin, v => v ? v + ' min di inattività' : 'Mai')}</select></label>
-      <label class="lbl">Svuota gli appunti dopo<select data-setting="clipClearSec">${opt([15, 30, 60, 0], st.clipClearSec, v => v ? v + ' secondi' : 'Mai')}</select></label>
-    </div>
-    <form class="card stack" id="pwForm"><h3>Master password</h3>
-      <label class="lbl">Password attuale<input type="password" name="cur" autocomplete="current-password" required></label>
-      <label class="lbl">Nuova password<input type="password" name="nw" autocomplete="new-password" required minlength="10">${meterHTML()}</label>
-      <label class="lbl">Ripeti la nuova password<input type="password" name="nw2" autocomplete="new-password" required></label>
-      ${S.file.kdf && S.file.kdf.keyfile && !rememberedKf() ? '<p class="hint">Ti verrà chiesto anche il keyfile.</p>' : ''}
-      <button class="btn primary left" type="submit">Cambia password</button>
-    </form>
-    <div class="card stack"><h3>Backup e importazione</h3>
-      <div class="row-btns"><button class="btn" data-act="export">Esporta backup cifrato</button>
-        <button class="btn" data-act="pick" data-kind="backup">Importa backup Scrigno</button></div>
-      <div class="row-btns"><button class="btn" data-act="pick" data-kind="enpass">Importa da Enpass (.json)</button>
-        <button class="btn" data-act="pick" data-kind="csv">Importa CSV</button></div>
-      <p class="hint">In Enpass: Impostazioni › Esporta › formato .json. Il CSV può venire da Chrome, Bitwarden o simili. Dopo l'importazione elimina il file esportato, perché non è cifrato. Gli elementi importati finiscono nel vault ${S.extra.length ? 'selezionato in alto nell\'elenco' : 'principale'}.</p>
-    </div>
-    <div class="card stack"><h3>Zona pericolosa</h3>
-      <button class="btn danger left" data-act="wipe">Rimuovi il vault da questo dispositivo</button>
-    </div>
-  </div>`;
-}
 
 async function tickTotp() {
   for (const el of $$('[data-totp]')) {
@@ -1316,15 +1277,18 @@ async function afterUnlock() {
   await loadExtras();
   for (const v of S.extra) if (v.file && purgeTrash(v.items)) await saveExtraVault(store, v).catch(() => {});
   pushIdentities();
+  pushAfPrefs();
   renderMain();
   if (hasAnySync()) syncNow(true);
+  backupAuto();
 }
 
-async function wipe() {
-  if (!confirm('Rimuovere il vault da questo dispositivo? Se non hai un backup o una copia nel cloud, i dati andranno persi.')) return;
+async function wipe(force) {
+  if (!force && !confirm('Rimuovere il vault da questo dispositivo? Se non hai un backup o una copia nel cloud, i dati andranno persi.')) return;
   for (const k of vaultKeyItems(S.items)) await store.del(vaultFileKey(k.f.vaultId)).catch(() => {});
   await store.del('vault'); await store.del('sync');
   await bioReset();
+  await pinDisable();
   rememberKf(null);
   if (Native.platform === 'ios') Native.call('identities', { list: [] }).catch(() => {});
   S.file = null; S.pendingSync = null;
@@ -1662,6 +1626,7 @@ async function onClick(e) {
       render();
       break;
     }
+    default: await settingsClick(act, b);
   }
 }
 
@@ -1669,6 +1634,7 @@ async function onSubmit(e) {
   const fm = e.target;
   if (fm.closest('dialog')) return;
   e.preventDefault();
+  if (await settingsSubmit(fm)) return;
   if (fm.id === 'unlockForm') {
     const btn = fm.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'Sblocco…';
@@ -1744,6 +1710,7 @@ function onInput(e) {
 
 async function onChange(e) {
   const t = e.target;
+  if (await settingsChange(t)) return;
   if (t.id === 'vaultSel') { S.view.vault = t.value; S.view.id = null; renderMain(); return; }
   if (t.id === 'sortSel') { S.settings.sort = t.value; saveSettings(); $('#items').innerHTML = renderList(); return; }
   if (t.dataset.role === 'prov') { t.closest('.cloudform').querySelector('[data-role=pf]').innerHTML = provFields(t.value); return; }
@@ -1831,12 +1798,16 @@ function onKey(e) {
 let lastAct = now();
 async function boot() {
   S.settings = loadSettings();
+  applyTheme();
   setupCloudEnv();
   try { S.file = (await store.get('vault')) || null; } catch (e) {
     $('#app').innerHTML = '<div class="center"><div class="card auth"><p class="err">Questo browser non consente l\'archiviazione locale (forse sei in navigazione privata).</p></div></div>';
     return;
   }
   await bioInit();
+  await pinInit();
+  pushDesktopPrefs();
+  if (S.settings.updateCheck) setTimeout(() => checkUpdate(false), 4000);
   document.addEventListener('click', guard(onClick));
   document.addEventListener('submit', guard(onSubmit));
   document.addEventListener('input', onInput);

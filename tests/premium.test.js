@@ -74,6 +74,7 @@ const PW = 'una-frase-molto-lunga-42';
 
   // modello personalizzato
   await page.click('[data-act=section][data-k=settings]');
+  await page.click('.stabs [data-k=look]');
   await page.click('[data-act=tpl-new]');
   await page.fill('#tplForm input[name=title]', 'Palestra');
   await page.fill('#tplForm [data-t=label]', 'Numero tessera');
@@ -100,6 +101,7 @@ const PW = 'una-frase-molto-lunga-42';
 
   // secondo vault
   await page.click('[data-act=section][data-k=settings]');
+  await page.click('.stabs [data-k=vault]');
   await page.click('summary:has-text("Nuovo vault")');
   await page.fill('#newVaultForm input[name=name]', 'Lavoro');
   await page.fill('#newVaultForm input[name=pw]', 'frase-del-lavoro-99');
@@ -122,6 +124,7 @@ const PW = 'una-frase-molto-lunga-42';
     return dav.has(u) ? r.fulfill({ status: 200, headers: h, contentType: 'application/json', body: dav.get(u) }) : r.fulfill({ status: 404, headers: h, body: '' });
   });
   await page.click('[data-act=section][data-k=settings]');
+  await page.click('.stabs [data-k=vault]');
   await page.click('.vrow:has-text("Lavoro") [data-act=vault-cloud]');
   await page.selectOption('.vcloud [data-role=prov]', 'webdav');
   await page.fill('.vcloud [data-c=url]', 'https://dav.test/u/scrigno-vault.json');
@@ -135,6 +138,7 @@ const PW = 'una-frase-molto-lunga-42';
 
   // keyfile
   await page.click('[data-act=section][data-k=settings]');
+  await page.click('.stabs [data-k=security]');
   const dlP = page.waitForEvent('download');
   await page.click('[data-act=kf-gen]');
   await page.fill('dialog input[type=password]', PW);

@@ -117,6 +117,20 @@ window.login = async () => {
   const vals = await pg.evaluate(() => [document.querySelector('[name=email]').value, document.querySelector('[name=pw]').value]);
   ok(vals[0] === 'mario@example.com' && vals[1] === 'Segreta!2024', 'campi compilati ' + vals);
 
+  // preferenze: accesso automatico e sito ignorato
+  await opt.evaluate(async () => chrome.runtime.sendMessage({ type: 'afSet', patch: { autoSubmit: true } }));
+  await pg.goto(base + '/login');
+  await pg.click('input[name=email]');
+  await clickShadowText(pg, 'localhost');
+  await pg.waitForURL(/done/, { timeout: 5000 }).then(() => ok(true, 'accesso automatico dopo la compilazione'), () => ok(false, 'accesso automatico dopo la compilazione'));
+  await opt.evaluate(async () => chrome.runtime.sendMessage({ type: 'afSet', patch: { autoSubmit: false, ignore: ['localhost'] } }));
+  await pg.goto(base + '/login');
+  await pg.click('input[name=email]');
+  await pg.waitForTimeout(700);
+  const menuShown = await pg.evaluate(() => !!document.querySelector('scrigno-ui'));
+  ok(!menuShown, 'nessun menu sui siti ignorati');
+  await opt.evaluate(async () => chrome.runtime.sendMessage({ type: 'afSet', patch: { ignore: [] } }));
+
   // passkey: creazione
   const pk = await ctx.newPage();
   pk.on('pageerror', e => errors.push('passkey ' + e.message));

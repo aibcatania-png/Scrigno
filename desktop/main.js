@@ -1,7 +1,7 @@
 'use strict';
 /* Scrigno per Windows, macOS e Linux: finestra con la web app, Auto-Type, cartelle sincronizzate, Touch ID. */
 const { app, BrowserWindow, Tray, Menu, ipcMain, protocol, net, shell, clipboard, dialog, globalShortcut,
-  systemPreferences, safeStorage, nativeImage } = require('electron');
+  systemPreferences, safeStorage, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -9,8 +9,14 @@ const { pathToFileURL } = require('url');
 const autotype = require('./autotype');
 
 const WEB = path.join(__dirname, 'web');
-const HOTKEY = 'CommandOrControl+Alt+A';
-let win = null, tray = null, quitting = false, pendingOAuth = null;
+let win = null, tray = null, quitting = false, pendingOAuth = null, hotkey = null;
+
+// Preferenze del computer impostate dalla web app (Impostazioni › Generali e Sicurezza).
+const prefsFile = () => path.join(app.getPath('userData'), 'desktop-prefs.json');
+const PREFS_DEFAULT = { tray: true, autostart: false, hotkey: 'A', lockOnClose: true, lockOnSuspend: true, lockOnUserSwitch: true, lockOnScreenLock: true, sysIdleMin: 5 };
+let prefs = { ...PREFS_DEFAULT };
+try { prefs = { ...PREFS_DEFAULT, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }; } catch { /* prima esecuzione */ }
+const startHidden = process.argv.includes('--hidden');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -45,17 +51,21 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
   win.loadURL('app://scrigno/index.html');
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { if (!(startHidden && prefs.tray)) win.show(); });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://scrigno/')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
-  win.on('close', e => { if (!quitting) { e.preventDefault(); win.hide(); } });
+  win.on('close', e => {
+    if (prefs.lockOnClose) send('lock');
+    if (!quitting && prefs.tray) { e.preventDefault(); win.hide(); }
+  });
   win.on('closed', () => { win = null; });
 }
 
 function createTray() {
+  if (tray) return;
   const img = nativeImage.createFromPath(path.join(__dirname, 'build', 'tray.png')).resize({ width: 18, height: 18 });
   tray = new Tray(img);
   tray.setToolTip('Scrigno');
@@ -155,7 +165,77 @@ const methods = {
     return true;
   },
   async autotypeCancel() { giveFocusBack(); return true; },
+  async desktopPrefs(p) {
+    prefs = { ...PREFS_DEFAULT, ...prefs, ...(p || {}) };
+    await fs.promises.writeFile(prefsFile(), JSON.stringify(prefs));
+    applyPrefs();
+    return true;
+  },
+  async appInfo() { return { version: app.getVersion(), platform: process.platform }; },
+  async openFolder({ dir }) { const d = backupDir(dir); await fs.promises.mkdir(d, { recursive: true }); await shell.openPath(d); return true; },
+  async backupList({ dir }) {
+    const d = backupDir(dir);
+    let names = [];
+    try { names = (await fs.promises.readdir(d)).filter(n => /^scrigno-backup-.*\.json$/.test(n)); } catch { names = []; }
+    const files = [];
+    for (const name of names) { try { files.push({ name, time: (await fs.promises.stat(path.join(d, name))).mtimeMs }); } catch { /* ignora */ } }
+    return { defaultDir: backupDir(''), files };
+  },
+  async backupWrite({ dir, name, text, keep }) {
+    const d = backupDir(dir);
+    await fs.promises.mkdir(d, { recursive: true });
+    await fs.promises.writeFile(path.join(d, path.basename(name)), text);
+    const { files } = await methods.backupList({ dir });
+    files.sort((a, b) => b.time - a.time);
+    for (const f of files.slice(Math.max(1, +keep || 60))) await fs.promises.rm(path.join(d, f.name), { force: true });
+    return true;
+  },
+  async backupRead({ dir, name }) {
+    if (!/^scrigno-backup-.*\.json$/.test(path.basename(name))) throw new Error('Nome non valido');
+    return fs.promises.readFile(path.join(backupDir(dir), path.basename(name)), 'utf8');
+  },
 };
+const backupDir = dir => dir || path.join(app.getPath('userData'), 'Backups');
+
+// ---------------------------------------------------------------- avvio con il sistema, scorciatoia, vassoio, blocco
+function setAutostart(on) {
+  if (process.platform === 'linux') {
+    const dir = path.join(os.homedir(), '.config', 'autostart');
+    const file = path.join(dir, 'scrigno.desktop');
+    const exe = process.env.APPIMAGE || process.execPath;
+    try {
+      if (on) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=Scrigno\nExec="${exe}" --hidden\nX-GNOME-Autostart-enabled=true\n`); }
+      else fs.rmSync(file, { force: true });
+    } catch (e) { console.warn('Avvio automatico non impostato:', e.message); }
+    return;
+  }
+  app.setLoginItemSettings({ openAtLogin: !!on, openAsHidden: true, args: ['--hidden'] });
+}
+function setHotkey(key) {
+  const k = /^[A-Z]$/.test(key || '') ? key : 'A';
+  const acc = 'CommandOrControl+Alt+' + k;
+  if (hotkey === acc) return;
+  if (hotkey) globalShortcut.unregister(hotkey);
+  hotkey = globalShortcut.register(acc, startAutotype) ? acc : null;
+  if (!hotkey) console.warn('Scorciatoia Auto-Type non disponibile:', acc);
+}
+function applyPrefs() {
+  if (app.isPackaged) setAutostart(prefs.autostart);
+  setHotkey(prefs.hotkey);
+  if (prefs.tray) createTray(); else if (tray) { tray.destroy(); tray = null; }
+}
+let idleLocked = false;
+function watchSystem() {
+  powerMonitor.on('suspend', () => { if (prefs.lockOnSuspend) send('lock'); });
+  powerMonitor.on('lock-screen', () => { if (prefs.lockOnScreenLock) send('lock'); });
+  powerMonitor.on('user-did-resign-active', () => { if (prefs.lockOnUserSwitch) send('lock'); });
+  setInterval(() => {
+    const min = +prefs.sysIdleMin || 0;
+    if (!min) return;
+    const idle = powerMonitor.getSystemIdleTime();
+    if (idle >= min * 60 && !idleLocked) { idleLocked = true; send('lock'); } else if (idle < 30) idleLocked = false;
+  }, 15000);
+}
 
 ipcMain.handle('scrigno:call', async (e, method, args) => {
   if (!e.senderFrame || !e.senderFrame.url.startsWith('app://scrigno/')) throw new Error('Non consentito');
@@ -176,12 +256,12 @@ app.whenReady().then(() => {
     { role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' },
   ]) : null);
   createWindow();
-  createTray();
-  if (!globalShortcut.register(HOTKEY, startAutotype)) console.warn('Scorciatoia Auto-Type non disponibile:', HOTKEY);
+  applyPrefs();
+  watchSystem();
   const link = process.argv.find(a => a.startsWith('scrigno://'));
   if (link) handleDeepLink(link);
   app.on('activate', showWindow);
 });
 app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
-app.on('window-all-closed', () => { /* resta nell'area di notifica */ });
+app.on('window-all-closed', () => { if (!prefs.tray) app.quit(); /* altrimenti resta nell'area di notifica */ });

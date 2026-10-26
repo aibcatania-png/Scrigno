@@ -8,7 +8,7 @@
 const api = typeof browser !== 'undefined' ? browser : chrome;
 const B = {
   file: null, dek: null, items: [], extra: [], sync: null, syncState: 'idle', syncErr: null,
-  settings: { autoLockMin: 15 }, lastAct: now(), loaded: false,
+  settings: { autoLockMin: 15 }, lastAct: now(), loaded: false, pendingOtp: new Map(),
   pendingSave: new Map(),   // tabId -> { host, url, username, password, existingId, ts }
   prompts: new Map(),       // id -> { kind, data, resolve, windowId }
 };
@@ -180,8 +180,24 @@ async function syncNow() {
 const senderOrigin = s => s.origin || (s.url ? new URL(s.url).origin : '');
 const senderHost = s => { try { return new URL(senderOrigin(s)).hostname; } catch { return ''; } };
 
-function loginsFor(host) {
-  return matchLogins(live(), { host }).map(i => ({ id: i.id, title: i.title, username: i.f.username || '', hasTotp: !!i.f.totp }));
+// Preferenze di compilazione (nel vault, condivise con l'app); una copia locale serve a vault bloccato.
+async function prefs() {
+  if (B.dek) {
+    const p = afPrefs(B.items);
+    const never = (await local.get('neverSave')) || [];
+    if (never.length) {   // vecchio elenco "Mai per questo sito" dell'estensione: passa nel vault
+      afPrefsSet(B.items, { ignore: [...new Set([...p.ignore, ...never.map(normDomain)])].sort() });
+      await local.del('neverSave');
+      await persist();
+      return prefs();
+    }
+    await local.set('afprefs', p);
+    return p;
+  }
+  return { ...AF_DEFAULT, ...((await local.get('afprefs')) || {}) };
+}
+function loginsFor(host, p) {
+  return matchLogins(live(), { host, exact: p && p.exactMatch }).map(i => ({ id: i.id, title: i.title, username: i.f.username || '', hasTotp: !!i.f.totp, url: i.f.url || '' }));
 }
 function passkeysFor(rpId) {
   return live().filter(i => i.type === 'passkey' && i.f.rpId === rpId && i.f.privateKey);
@@ -189,9 +205,11 @@ function passkeysFor(rpId) {
 
 async function offerSave(tabId, host, url, username, password) {
   if (!password) return null;
+  const p0 = await prefs();
+  if (!p0.askSave || domainIgnored(p0, host)) return null;
   let existingId = null;
   if (B.dek) {
-    const same = matchLogins(live(), { host }).filter(i => (i.f.username || '') === (username || ''));
+    const same = matchLogins(live(), { host, exact: p0.exactMatch }).filter(i => (i.f.username || '') === (username || ''));
     if (same.some(i => i.f.password === password)) return null;
     if (same[0]) existingId = same[0].id;
   }
@@ -356,7 +374,8 @@ const handlers = {
     if (!B.dek) throw new Error('Bloccato');
     touch();
     const host = url ? hostOf(url) : '';
-    const match = new Set(host ? matchLogins(live(), { host }).map(i => i.id) : []);
+    const pf = await prefs();
+    const match = new Set(host && !domainIgnored(pf, host) ? matchLogins(live(), { host, exact: pf.exactMatch }).map(i => i.id) : []);
     return live().map(i => ({ id: i.id, type: i.type, title: i.title, sub: i.f.username || i.f.rpId || hostOf(i.f.url || '') || '', url: i.f.url || '',
       hasPw: !!i.f.password, hasTotp: !!i.f.totp, match: match.has(i.id) }));
   },
@@ -371,8 +390,10 @@ const handlers = {
   async fillTab({ id, tabId }) {
     const it = live().find(i => i.id === id);
     const tab = await api.tabs.get(tabId);
-    if (!matchLogins([it], { host: hostOf(tab.url) }).length) throw new Error('Questo login non è per il sito aperto.');
-    await api.tabs.sendMessage(tabId, { type: 'doFill', username: it.f.username || '', password: it.f.password || '' }, { frameId: 0 });
+    if (!matchLogins([it], { host: hostOf(tab.url), exact: (await prefs()).exactMatch }).length) throw new Error('Questo login non è per il sito aperto.');
+    const pf = await prefs();
+    const code = pf.otpCopy && it.f.totp ? await totp(parseTotp(it.f.totp)).catch(() => '') : '';
+    await api.tabs.sendMessage(tabId, { type: 'doFill', username: it.f.username || '', password: it.f.password || '', totp: code, autoSubmit: pf.autoSubmit }, { frameId: 0 });
     touch();
     return true;
   },
@@ -380,6 +401,13 @@ const handlers = {
   async genState() {
     const o = genOpts(await local.get('gen'));
     return { opts: o, seps: GEN_SEPS, bits: bitsLevel(genBits(o)), history: B.dek ? genHistory(B.items).slice(0, 10) : [] };
+  },
+  async afGet() { return prefs(); },
+  async afSet({ patch }) {
+    if (!B.dek) throw new Error('Bloccato');
+    afPrefsSet(B.items, patch);
+    await persist();
+    return prefs();
   },
   async genSet({ opts }) { await local.set('gen', genOpts({ ...genOpts(await local.get('gen')), ...opts })); return true; },
   async genUsed({ pw, site }) {
@@ -428,17 +456,27 @@ const handlers = {
   async pageMatches(_, s) {
     const host = senderHost(s);
     if (!B.file) return { state: 'none' };
-    if (!B.dek) return { state: 'locked' };
+    const p = await prefs();
+    if (domainIgnored(p, host)) return { state: 'none' };
+    if (!B.dek) return { state: p.lockedSuggest ? 'locked' : 'none' };
     touch();
-    return { state: 'ok', logins: loginsFor(host) };
+    return { state: 'ok', logins: loginsFor(host, p), favicons: B.settings.favicons !== false };
   },
   async pageFill({ id, totpOnly }, s) {
     if (!B.dek) throw new Error('Bloccato');
+    const p = await prefs();
     const it = live().find(i => i.id === id);
-    if (!it || !matchLogins([it], { host: senderHost(s) }).length) throw new Error('Login non valido per questo sito');
+    if (!it || !matchLogins([it], { host: senderHost(s), exact: p.exactMatch }).length) throw new Error('Login non valido per questo sito');
     touch();
     const code = it.f.totp ? await totp(parseTotp(it.f.totp)).catch(() => '') : '';
-    return totpOnly ? { totp: code } : { username: it.f.username || '', password: it.f.password || '', totp: code };
+    if (!totpOnly && p.otpCopy && code && s.tab) B.pendingOtp.set(s.tab.id, { id, host: baseDomain(senderHost(s)), until: now() + 120000 });
+    return totpOnly ? { totp: code } : { username: it.f.username || '', password: it.f.password || '', totp: p.otpCopy ? code : '', autoSubmit: p.autoSubmit, otp: p.otpCopy && !!code };
+  },
+  // Dopo un invio automatico il codice 2FA viene chiesto spesso nella pagina successiva.
+  async pagePendingOtp(_, s) {
+    const o = s.tab && B.pendingOtp.get(s.tab.id);
+    if (!o || now() > o.until || o.host !== baseDomain(senderHost(s)) || !B.dek) return null;
+    return { id: o.id };
   },
   async pageUnlock(_, s) { return ensureUnlocked('Sblocca per compilare su ' + senderHost(s)); },
   async pageSubmitted({ username, password }, s) {
@@ -455,15 +493,21 @@ const handlers = {
     if (!p) return false;
     B.pendingSave.delete(s.tab.id);
     if (decision === 'never') {
-      const never = (await local.get('neverSave')) || [];
-      never.push(baseDomain(p.host));
-      await local.set('neverSave', never);
+      if (B.dek) {
+        const pf = afPrefs(B.items);
+        afPrefsSet(B.items, { ignore: [...new Set([...pf.ignore, baseDomain(p.host)])].sort() });
+        await persist(); await prefs();
+      } else {
+        const never = (await local.get('neverSave')) || [];
+        never.push(baseDomain(p.host));
+        await local.set('neverSave', never);
+      }
       return true;
     }
     if (decision !== 'save') return true;
     if (!(await ensureUnlocked('Sblocca per salvare il login'))) return false;
     if (!p.existingId) {
-      const same = matchLogins(live(), { host: p.host }).find(i => (i.f.username || '') === (p.username || ''));
+      const same = matchLogins(live(), { host: p.host, exact: afPrefs(B.items).exactMatch }).find(i => (i.f.username || '') === (p.username || ''));
       if (same) p.existingId = same.id;
     }
     await doSave(p);
@@ -499,8 +543,22 @@ api.alarms.onAlarm.addListener(async a => {
 api.commands.onCommand.addListener(async cmd => {
   if (cmd !== 'fill-login') return;
   const [tab] = await api.tabs.query({ active: true, currentWindow: true });
-  if (tab) api.tabs.sendMessage(tab.id, { type: 'openMenu' }, { frameId: 0 }).catch(() => {});
+  if (!tab) return;
+  await ensureLoaded();
+  if (B.dek && tab.url) {
+    const p = await prefs();
+    const host = hostOf(tab.url);
+    const m = domainIgnored(p, host) ? [] : matchLogins(live(), { host, exact: p.exactMatch });
+    if (p.fillSingle && m.length === 1) {
+      const it = m[0];
+      touch();
+      const code = it.f.totp ? await totp(parseTotp(it.f.totp)).catch(() => '') : '';
+      api.tabs.sendMessage(tab.id, { type: 'doFill', username: it.f.username || '', password: it.f.password || '', totp: p.otpCopy ? code : '', autoSubmit: p.autoSubmit }, { frameId: 0 }).catch(() => {});
+      return;
+    }
+  }
+  api.tabs.sendMessage(tab.id, { type: 'openMenu' }, { frameId: 0 }).catch(() => {});
 });
-api.tabs.onRemoved.addListener(id => B.pendingSave.delete(id));
+api.tabs.onRemoved.addListener(id => { B.pendingSave.delete(id); B.pendingOtp.delete(id); });
 api.runtime.onInstalled.addListener(d => { if (d.reason === 'install') api.runtime.openOptionsPage(); });
 ensureLoaded().then(updateBadge);

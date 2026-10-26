@@ -17,6 +17,7 @@ import android.service.autofill.SaveInfo
 import android.service.autofill.SaveRequest
 import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
+import app.scrigno.AfPrefs
 import app.scrigno.R
 import app.scrigno.Repo
 import app.scrigno.Session
@@ -30,11 +31,14 @@ class ScrignoAutofillService : AutofillService() {
     override fun onFillRequest(request: FillRequest, cancellationSignal: CancellationSignal, callback: FillCallback) {
         val t = try { StructureParser.parse(request.fillContexts.last().structure) } catch (e: Exception) { callback.onSuccess(null); return }
         if (t.pkg == packageName || t.ids.isEmpty()) { callback.onSuccess(null); return }
+        val prefs = AfPrefs.load(this)
+        if (prefs.ignored(t.webDomain)) { callback.onSuccess(null); return }
         val resp = FillResponse.Builder()
         val dek = Session.get()
+        if (dek == null && !prefs.lockedSuggest) { callback.onSuccess(null); return }
         if (dek != null) {
             val items = try { Repo.items(this, dek) } catch (e: Exception) { emptyList() }
-            val matches = Vault.matchLogins(items, t.webDomain, t.matchPkg)
+            val matches = Vault.matchLogins(items, t.webDomain, t.matchPkg, prefs.exactMatch)
             if (t.otpId != null && t.passwordId == null) {
                 matches.filter { Vault.field(it, "totp").isNotEmpty() }.take(4).forEach { item ->
                     Fill.otpDataset(this, item, t)?.let { resp.addDataset(it) }
@@ -44,7 +48,7 @@ class ScrignoAutofillService : AutofillService() {
             }
         }
         resp.addDataset(Fill.authDataset(this, t, if (dek == null) "Sblocca Scrigno" else "Cerca in Scrigno…"))
-        if (t.passwordId != null) {
+        if (t.passwordId != null && prefs.askSave) {
             val type = SaveInfo.SAVE_DATA_TYPE_PASSWORD or (if (t.usernameId != null) SaveInfo.SAVE_DATA_TYPE_USERNAME else 0)
             resp.setSaveInfo(SaveInfo.Builder(type, listOfNotNull(t.usernameId, t.passwordId).toTypedArray()).build())
         }
@@ -54,7 +58,7 @@ class ScrignoAutofillService : AutofillService() {
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
         val t = try { StructureParser.parse(request.fillContexts.last().structure) } catch (e: Exception) { callback.onSuccess(); return }
         val pw = t.password
-        if (pw.isNullOrEmpty() || t.pkg == packageName) { callback.onSuccess(); return }
+        if (pw.isNullOrEmpty() || t.pkg == packageName || AfPrefs.load(this).ignored(t.webDomain)) { callback.onSuccess(); return }
         val dek = Session.get()
         if (dek != null) {
             try {

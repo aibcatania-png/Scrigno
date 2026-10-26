@@ -276,14 +276,40 @@ function baseDomain(host) {
   return SLD.has(last2) && p.length >= 3 ? p.slice(-3).join('.') : last2;
 }
 // Elementi adatti a un sito (host) o a un'app Android (package).
-function matchLogins(items, { host, pkg }) {
+// exact: il sito deve coincidere con l'indirizzo salvato (es. account.esempio.com ≠ esempio.com).
+function matchLogins(items, { host, pkg, exact }) {
   const bd = host ? baseDomain(host) : '';
+  const h = String(host || '').toLowerCase().replace(/^www\./, '');
   return items.filter(i => isActive(i) && i.type === 'login').filter(i => {
     if (pkg && (i.custom || []).some(c => c.label === APP_FIELD && c.value === pkg)) return true;
     if (pkg && i.f.url && i.f.url.trim() === 'androidapp://' + pkg) return true;
-    if (bd && i.f.url) return baseDomain(hostOf(i.f.url)) === bd;
+    if (bd && i.f.url) return exact ? hostOf(i.f.url).toLowerCase().replace(/^www\./, '') === h : baseDomain(hostOf(i.f.url)) === bd;
     return false;
   });
+}
+
+// Preferenze di compilazione automatica: nel vault (elemento interno "_prefs"), uguali su tutti i dispositivi.
+const AF_DEFAULT = { autoSubmit: false, otpCopy: true, fillSingle: false, exactMatch: false, lockedSuggest: true, askSave: true, ignore: [] };
+function afPrefs(items) {
+  const it = (items || []).find(i => i.type === '_prefs' && !i.deleted);
+  let p = {};
+  try { p = it ? JSON.parse(it.f.autofill || '{}') : {}; } catch { p = {}; }
+  return { ...AF_DEFAULT, ...p, ignore: Array.isArray(p.ignore) ? p.ignore : [] };
+}
+function afPrefsSet(items, patch) {
+  let it = items.find(i => i.type === '_prefs' && !i.deleted);
+  if (!it) { it = makeItem('_prefs', 'Preferenze', { autofill: '{}' }); items.push(it); }
+  it.f = { ...it.f, autofill: JSON.stringify({ ...afPrefs(items), ...patch }) };
+  it.updated = now();
+}
+function normDomain(d) {
+  d = String(d || '').trim().toLowerCase();
+  try { if (/^[a-z]+:\/\//.test(d)) d = new URL(d).hostname; } catch { /* ignora */ }
+  return d.replace(/^www\./, '').replace(/\/.*$/, '');
+}
+function domainIgnored(prefs, host) {
+  const h = normDomain(host);
+  return !!h && prefs.ignore.some(d => h === d || h.endsWith('.' + d));
 }
 function rpIdAllowed(rpId, host) {
   rpId = String(rpId || '').toLowerCase();

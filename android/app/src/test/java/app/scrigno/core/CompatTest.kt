@@ -105,4 +105,11 @@ class CompatTest {
         }
         JSONArray()
     }
+
+    @Test fun exactMatch() {
+        val all = listOf(Vault.newItem("login", "E", JSONObject().put("url", "https://www.esempio.com").put("username", "u")))
+        assertEquals(1, Vault.matchLogins(all, "account.esempio.com", null).size)
+        assertEquals(0, Vault.matchLogins(all, "account.esempio.com", null, exact = true).size)
+        assertEquals(1, Vault.matchLogins(all, "esempio.com", null, exact = true).size)
+    }
 }

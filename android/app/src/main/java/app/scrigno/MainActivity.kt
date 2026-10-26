@@ -148,6 +148,7 @@ class MainActivity : AppCompatActivity() {
             "kvSet" -> { Repo.set(this, a.getString("key"), a.get("value").toString()); ok(id) }
             "kvDel" -> { Repo.del(this, a.getString("key")); ok(id) }
             "session" -> { Session.set(this, B64.dec(a.getString("dek")), a.optInt("ttlMin", 5)); ok(id) }
+            "afPrefs" -> { AfPrefs.save(this, a.getString("prefs")); ok(id) }
             "lock" -> { Session.clear(); ok(id) }
             "http" -> io.execute {
                 try {
