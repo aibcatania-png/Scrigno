@@ -184,18 +184,21 @@ const GDrive = {
     if (!r.ok && r.status !== 404) throw new Error('Google Drive: errore ' + r.status);
     return r;
   },
+  // Il file si cerca sempre per nome (non si memorizza l'ID): se due dispositivi hanno creato
+  // ciascuno un proprio file con lo stesso nome, tutti usano il più vecchio, così i dati si riuniscono.
   async fileId(c) {
-    if (c.fileId) return c.fileId;
     const r = await this.api(c, 'https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({
-      spaces: 'appDataFolder', q: `name='${fileOf(c)}'`, fields: 'files(id)' }));
+      spaces: 'appDataFolder', q: `name='${fileOf(c)}' and trashed=false`, fields: 'files(id,createdTime)', pageSize: '20' }));
     const j = await r.json();
-    return (c.fileId = (j.files && j.files[0] && j.files[0].id) || null);
+    const files = ((j && j.files) || []).sort((a, b) => String(a.createdTime).localeCompare(String(b.createdTime)));
+    delete c.fileId;
+    return files.length ? files[0].id : null;
   },
   async download(c) {
     const id = await this.fileId(c);
     if (!id) return null;
     const r = await this.api(c, `https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
-    if (r.status === 404) { c.fileId = null; return null; }
+    if (r.status === 404) return null;
     return r.json();
   },
   async upload(c, file) {
@@ -210,7 +213,7 @@ const GDrive = {
       `\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(file)}\r\n--${b}--`;
     const r = await this.api(c, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
       { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
-    c.fileId = (await r.json()).id;
+    await r.json();
   },
 };
 

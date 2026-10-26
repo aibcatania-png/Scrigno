@@ -1072,6 +1072,7 @@ function renderSettings() {
   return `<div class="pagewrap"><h1>Impostazioni</h1>
     <div class="card stack"><h3>Sincronizzazione cloud</h3>
       ${sy ? `<p>Collegato a <b>${PROVIDERS[sy.provider].name}</b>${sy.label ? ` (${esc(sy.label)})` : ''}${sy.lastSync ? ` · ultima sincronizzazione ${fmtDate(sy.lastSync)}` : ''}</p>
+        ${sy.provider === 'gdrive' ? `<p class="hint">App Google n. <b>${esc(String(sy.clientId || '').split('-')[0])}</b> · ${sy.refresh && sy.clientSecret ? 'accesso permanente' : 'accesso da rinnovare ogni ora (manca il client secret)'}. Tutti i dispositivi devono usare la stessa app Google: con un Client ID diverso Google Drive mostra un'altra cartella privata.</p>` : ''}
         ${S.syncErr ? `<p class="err">${esc(S.syncErr.message)}</p>` : ''}
         <div class="row-btns"><button class="btn primary" data-act="sync">Sincronizza ora</button>
           ${reauth ? '<button class="btn" data-act="reauth">Riconnetti</button>' : ''}

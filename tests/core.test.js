@@ -145,6 +145,12 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   ctx.__gc = gc;
   ok(gc.refresh === 'R1' && /access_type=offline/.test(ctx.__glog[0]) && /code_challenge=/.test(ctx.__glog[0]), 'Google Drive: flusso con codice e refresh token');
   ok(await R(`PROVIDERS.gdrive.download(__gc)`) === null && ctx.__gc.access === 'A2' && ctx.__glog.some(l => l.includes('grant_type=refresh_token') && l.includes('client_secret=sec')), 'Google Drive: token rinnovato da solo');
+  R(`__gf = []; Cloud.env.fetch = async (url, opt = {}) => { __gf.push(url);
+      if (url.includes('/drive/v3/files?')) return { ok: true, status: 200, json: async () => ({ files: [{ id: 'NEW', createdTime: '2026-10-26T10:00:00Z' }, { id: 'OLD', createdTime: '2026-10-20T10:00:00Z' }] }) };
+      if (url.includes('/files/OLD?alt=media')) return { ok: true, status: 200, json: async () => ({ format: 'scrigno', from: 'old' }) };
+      return { ok: true, status: 200, json: async () => ({ from: 'new' }) }; }`);
+  ctx.__gc.access = 'A9'; ctx.__gc.exp = Date.now() + 600000; ctx.__gc.fileId = 'NEW';
+  ok((await R(`PROVIDERS.gdrive.download(__gc)`)).from === 'old', 'Google Drive: con file doppi tutti usano il più vecchio');
   const gi = await R(`(async()=>{ Cloud.env.authorize = async () => ({ access_token: 'T', expires_in: 3600 }); return PROVIDERS.gdrive.connect({ clientId: 'cid' }); })()`);
   ok(gi.access === 'T' && !gi.refresh, 'Google Drive: senza secret resta il flusso implicito');
   R(`Cloud.env = null`);
