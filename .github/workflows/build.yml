@@ -22,10 +22,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - run: npm install --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
       - run: |
           set -o pipefail
-          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && node tests/layout.test.js && python3 tools/build_extension.py && node tests/extension.test.js; } 2>&1 | tee ci.log
+          for i in 1 2 3; do npx playwright install --with-deps chromium 2>&1 | tee pw.log && exit 0; sleep 30; done; exit 1
+      - if: failure()
+        run: tools/ci_report.sh pw.log 60
+      - run: |
+          set -o pipefail
+          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && node tests/layout.test.js && python3 tools/build_extension.py && node tests/extension.test.js && node tests/gen.test.js; } 2>&1 | tee ci.log
       - if: failure()
         run: tools/ci_report.sh ci.log
 
