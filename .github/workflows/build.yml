@@ -95,7 +95,8 @@ jobs:
       - name: Chiave di firma
         env: { KS: '${{ secrets.ANDROID_KEYSTORE_BASE64 }}' }
         run: |
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/scrigno.jks"; echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/scrigno.jks" >> "$GITHUB_ENV"; fi
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/scrigno.jks"; echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/scrigno.jks" >> "$GITHUB_ENV"
+          else echo "::warning title=Firma Android::Segreto ANDROID_KEYSTORE_BASE64 mancante: APK firmato con una chiave provvisoria, non si aggiornerà sopra la versione installata."; fi
       - name: Test e build
         working-directory: android
         env:
