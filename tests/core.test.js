@@ -3,7 +3,7 @@ let fails = 0;
 const __kv_has_kf = f => !!(f.kdf && f.kdf.keyfile);
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 (async () => {
-  const { ctx, R } = load(['web/js/core.js', 'web/js/native.js', 'web/js/cloud.js', 'web/js/passkey.js', 'web/js/vaults.js']);
+  const { ctx, R } = load(['web/js/core.js', 'web/js/words.js', 'web/js/native.js', 'web/js/cloud.js', 'web/js/passkey.js', 'web/js/vaults.js']);
   // TOTP RFC 6238
   ctx.__sec = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
   for (const [t, exp] of [[59, '94287082'], [1111111109, '07081804'], [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130']])
@@ -114,6 +114,25 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   ok(op.items.length === 1 && op.items[0].title === 'Intranet' && op.name === 'Lavoro', 'vault aggiuntivo: riaperto con la chiave del principale');
   ok(!!(await R(`vaultUnlock(__xv.file, 'frase-lavoro-lunga')`)), 'vault aggiuntivo: apribile anche con la sua password');
   ok(R(`cloudCfgForFile({provider:'dropbox',fileId:'x',appKey:'k'},'a.json')`).fileName === 'a.json', 'cloud: nome file per vault');
+  // generatore in stile Enpass
+  for (let k = 0; k < 200; k++) {
+    const pw = R(`genPassword({ length: 12, minUpper: 2, minDigits: 3, minSymbols: 2 })`);
+    if (pw.length !== 12 || (pw.match(/[A-Z]/g) || []).length < 2 || (pw.match(/\d/g) || []).length < 3 || (pw.match(/[^A-Za-z0-9]/g) || []).length < 2 || !/[a-z]/.test(pw)) { ok(false, 'generatore: minimi rispettati ' + pw); break; }
+    if (k === 199) ok(true, 'generatore: lunghezza e minimi di maiuscole, cifre e simboli');
+  }
+  const amb = Array.from({ length: 100 }, () => R(`genPassword({ length: 40, noAmbig: true, exclude: '#$' })`)).join('');
+  ok(!/[Il1|O0o#$]/.test(amb), 'generatore: niente caratteri ambigui o esclusi');
+  ok(/^[a-z]+$/.test(R(`genPassword({ length: 30, upper: false, digits: false, symbols: false })`)), 'generatore: solo minuscole');
+  ok(R(`genPassword({ length: 200 })`).length === 100 && R(`genPassword({ length: 1 })`).length === 4, 'generatore: lunghezza 4–100');
+  const ph = R(`genPassword({ mode: 'words', words: 5, sep: '-', wordCaps: true, wordDigit: true, lang: 'it' })`);
+  const parts = ph.split('-');
+  ok(parts.length === 5 && parts.every(w => /^[A-Z][a-z]+\d?$/.test(w)) && (ph.match(/\d/g) || []).length === 1, 'pronunciabile: 5 parole con iniziale maiuscola e una cifra ' + ph);
+  ok(R(`WORDLISTS.it.includes(${JSON.stringify(parts[0].replace(/\d/, '').toLowerCase())})`), 'pronunciabile: parole italiane');
+  ok(/^[a-z]+(\d[a-z]+){2}$/.test(R(`genPassword({ mode: 'words', words: 3, sep: '#digit', wordCaps: false, wordDigit: false, lang: 'en' })`)), 'pronunciabile: separatore cifra casuale');
+  ok(R(`genBits({ mode: 'words', words: 4, wordDigit: false, lang: 'it' })`) === 52 && R(`genBits({ length: 20 })`) > 120, 'generatore: entropia');
+  R(`__gh = []; genHistoryAdd(__gh, 'aaa', 'x.it'); genHistoryAdd(__gh, 'bbb'); genHistoryAdd(__gh, 'aaa', 'y.it')`);
+  const gh = R(`genHistory(__gh)`);
+  ok(gh.length === 2 && gh[0].pw === 'aaa' && gh[0].site === 'y.it' && R(`!isActive(__gh[0])`), 'cronologia generatore nel vault (nascosta)');
   // Google Drive con refresh token (servizio finto)
   ctx.__glog = [];
   R(`Cloud.env = { redirect: () => 'https://x/oauth-app.html', authorize: async (h, url, st) => { __glog.push(url); return { code: 'C1', state: st }; },

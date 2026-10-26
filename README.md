@@ -9,7 +9,8 @@ Password manager multipiattaforma in stile Enpass: un unico vault cifrato, sincr
 | Windows | Installer `.exe` | Estensione browser + Auto-Type nelle app (`Ctrl Alt A`) | Nei siti, con l'estensione |
 | macOS | `.dmg` (Apple Silicon e Intel) | Estensione browser + Auto-Type (`⌘ ⌥ A`) | Nei siti, con l'estensione |
 | Linux | `.AppImage` e `.deb` | Estensione browser + Auto-Type (`Ctrl Alt A`) | Nei siti, con l'estensione |
-| Chrome, Edge, Firefox | Estensione | Menu nei campi di accesso, salvataggio dei nuovi login | Sì, creazione e accesso |
+| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Estensione | Menu nei campi di accesso, salvataggio dei nuovi login | Sì, creazione e accesso |
+| Firefox (computer e Android) | Estensione | Menu nei campi di accesso, salvataggio dei nuovi login | Sì, creazione e accesso |
 | Qualsiasi browser | Web app installabile | — | — |
 
 Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Drive** (iCloud su iPhone, iPad e Mac; su Windows e Linux puoi usare anche la cartella sincronizzata di OneDrive o Dropbox).
@@ -24,7 +25,8 @@ Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Dr
 - **Keyfile**: un file da tenere su chiavetta o telefono, richiesto oltre alla master password.
 - **Cestino** (30 giorni) e **cronologia delle password**.
 - **Tag** (le cartelle di Enpass diventano tag all'importazione), ordinamento dell'elenco e **scorciatoie da tastiera** (premi `?`).
-- Codici 2FA integrati, generatore di password, importazione da Enpass/CSV, sblocco biometrico.
+- **Generatore di password come Enpass**: casuale (4–100 caratteri, maiuscole, cifre e simboli con un minimo per ciascuno, caratteri ambigui, caratteri da escludere) o **pronunciabile** (2–12 parole italiane o inglesi, separatore a scelta, iniziali maiuscole, una cifra), caratteri colorati, forza in bit e **cronologia** delle password generate, cifrata nel vault.
+- Codici 2FA integrati, importazione da Enpass/CSV, sblocco biometrico.
 
 ## Come è fatto
 
@@ -97,7 +99,25 @@ Il vault viene caricato già cifrato: il cloud non vede mai password o nomi.
 
 - **Android** — Scrigno › Impostazioni › *Imposta compilazione automatica*. Per le passkey (Android 14+): Impostazioni di sistema › Password, passkey e account › attiva Scrigno. In Chrome per Android attiva anche, se presente, *Compilazione automatica con un altro servizio*.
 - **iPhone/iPad** — Impostazioni › Generali › Compilazione automatica e password › attiva Scrigno.
-- **Computer** — installa l'estensione (Chrome/Edge: `chrome://extensions` › Modalità sviluppatore › Carica estensione non pacchettizzata, oppure pubblicala sul Chrome Web Store; Firefox: va firmata gratis su addons.mozilla.org). Nelle app desktop usa la scorciatoia Auto-Type. Su macOS concedi a Scrigno il permesso *Accessibilità*; su Linux installa `xdotool` (X11) o `wtype` (Wayland).
+- **Computer** — installa l'estensione del tuo browser (sotto). Nelle app desktop usa la scorciatoia Auto-Type. Su macOS concedi a Scrigno il permesso *Accessibilità*; su Linux installa `xdotool` (X11) o `wtype` (Wayland).
+
+## Estensioni per i browser
+
+Ogni release contiene tre pacchetti:
+
+| File | Browser | Come si installa |
+|---|---|---|
+| `scrigno-chromium-….zip` | Chrome, Edge, Brave, Opera, Vivaldi, Arc | Decomprimi › apri la pagina estensioni (`chrome://extensions`, `edge://extensions`, `brave://extensions`, `opera://extensions`, `vivaldi://extensions`) › attiva *Modalità sviluppatore* › *Carica estensione non pacchettizzata* › scegli la cartella |
+| `scrigno-firefox-….xpi` | Firefox per computer e Firefox per Android | Apri il file con Firefox › *Aggiungi*. Il file firmato c'è se sono impostati i segreti `AMO_JWT_ISSUER` e `AMO_JWT_SECRET` (chiavi API gratuite di addons.mozilla.org › Strumenti › Gestisci credenziali API); altrimenti c'è solo lo `.zip` da firmare a mano o da caricare come componente temporaneo in `about:debugging` |
+| `scrigno-store-….zip` | Chrome Web Store, Microsoft Edge Add-ons, Opera Add-ons | Da caricare nella console sviluppatori dello store. Lo store assegna un ID nuovo: aggiungi ai servizi cloud l'indirizzo di ritorno mostrato nelle impostazioni dell'estensione |
+
+Il pacchetto `chromium` ha un ID fisso, quindi l'indirizzo di ritorno per i cloud resta `https://fcamedobbplknjdnnldngkghapdcakik.chromiumapp.org/oauth`. Nei browser senza l'API di accesso di Chrome (per esempio Opera) l'estensione apre il login in una scheda e usa la pagina `oauth.html` della web app, già registrata per la web app.
+
+Safari non è supportato: le estensioni Safari richiedono un account Apple Developer a pagamento. Su Mac usa un altro browser con l'estensione, oppure l'app desktop con Auto-Type.
+
+## Elenchi di parole
+
+Le password pronunciabili usano l'elenco italiano di [diceware](https://github.com/ulif/diceware) (victordargallo, CC BY 4.0) e la *EFF Large Wordlist* (Electronic Frontier Foundation, CC BY 3.0), limitati alle parole di 3–9 lettere senza accenti.
 
 ## Sicurezza
 

@@ -302,17 +302,82 @@ function randInt(n) {
   do crypto.getRandomValues(a); while (a[0] >= lim);
   return a[0] % n;
 }
-function genPassword(o) {
-  const sets = Object.keys(CHARS).filter(k => o[k]).map(k => o.noAmbig ? CHARS[k].replace(/[Il1O0o|]/g, '') : CHARS[k]);
-  if (!sets.length) sets.push(CHARS.lower);
-  const all = sets.join('');
-  const len = Math.max(o.length || 16, sets.length);
-  const out = sets.map(s => s[randInt(s.length)]);
-  while (out.length < len) out.push(all[randInt(all.length)]);
-  for (let i = out.length - 1; i > 0; i--) { const j = randInt(i + 1); [out[i], out[j]] = [out[j], out[i]]; }
-  return out.join('');
+/*
+ * Generatore in stile Enpass: password casuale (lunghezza, maiuscole, cifre e simboli con un
+ * minimo ciascuno, caratteri ambigui, caratteri da escludere) oppure pronunciabile (parole
+ * separate, iniziali maiuscole, una cifra). Le opzioni mancanti prendono i valori predefiniti.
+ */
+const AMBIGUOUS = /[Il1|O0o`'"]/g;
+const GEN_DEFAULT = { mode: 'random', length: 20, upper: true, digits: true, symbols: true, minUpper: 1, minDigits: 2, minSymbols: 2,
+  noAmbig: false, exclude: '', words: 5, sep: '-', wordCaps: true, wordDigit: true, lang: 'it' };
+const GEN_SEPS = [['-', 'Trattino (-)'], [' ', 'Spazio'], ['.', 'Punto (.)'], ['_', 'Trattino basso (_)'], [',', 'Virgola (,)'],
+  ['/', 'Barra (/)'], ['', 'Nessuno'], ['#digit', 'Cifra casuale'], ['#symbol', 'Simbolo casuale']];
+const genOpts = o => ({ ...GEN_DEFAULT, ...(o || {}) });
+function genPools(o) {
+  const clean = t => [...new Set(t.replace(o.noAmbig ? AMBIGUOUS : /(?!)/, ''))].filter(c => !(o.exclude || '').includes(c)).join('');
+  return { lower: clean(CHARS.lower), upper: o.upper ? clean(CHARS.upper) : '', digits: o.digits ? clean(CHARS.digits) : '', symbols: o.symbols ? clean(CHARS.symbols) : '' };
 }
-const GEN_DEFAULT = { length: 20, lower: true, upper: true, digits: true, symbols: true, noAmbig: false };
+const pick = s => s[randInt(s.length)];
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function genRandom(o) {
+  const P = genPools(o);
+  const len = Math.min(100, Math.max(4, +o.length || 20));
+  const all = P.lower + P.upper + P.digits + P.symbols || CHARS.lower;
+  const need = [];
+  const want = (pool, n) => { if (pool) for (let i = 0; i < Math.max(1, +n || 0); i++) need.push(pool); };
+  want(P.upper, o.minUpper); want(P.digits, o.minDigits); want(P.symbols, o.minSymbols);
+  if (P.lower) need.push(P.lower);
+  const out = shuffle(need).slice(0, len).map(pick);
+  while (out.length < len) out.push(pick(all));
+  return shuffle(out).join('');
+}
+function genWords(o) {
+  const list = (typeof WORDLISTS !== 'undefined' && WORDLISTS[o.lang]) || (typeof WORDLISTS !== 'undefined' && WORDLISTS.it);
+  if (!list) return genRandom(o);
+  const n = Math.min(12, Math.max(2, +o.words || 4));
+  const w = Array.from({ length: n }, () => pick(list)).map(x => o.wordCaps ? x[0].toUpperCase() + x.slice(1) : x);
+  if (o.wordDigit) { const i = randInt(n); w[i] += pick(o.noAmbig ? '23456789' : CHARS.digits); }
+  const sep = () => o.sep === '#digit' ? pick(o.noAmbig ? '23456789' : CHARS.digits) : o.sep === '#symbol' ? pick('!@#$%&*-_=+.?') : o.sep;
+  return w.reduce((acc, x, i) => i ? acc + sep() + x : x, '');
+}
+function genPassword(o) { o = genOpts(o); return o.mode === 'words' ? genWords(o) : genRandom(o); }
+// Entropia del metodo (non della singola password): è quella che conta per un generatore.
+function genBits(o) {
+  o = genOpts(o);
+  if (o.mode === 'words' && typeof WORDLISTS !== 'undefined') {
+    const n = Math.min(12, Math.max(2, +o.words || 4));
+    let b = n * Math.log2((WORDLISTS[o.lang] || WORDLISTS.it).length);
+    if (o.wordDigit) b += Math.log2(10 * n);
+    if (o.sep === '#digit') b += (n - 1) * Math.log2(10);
+    if (o.sep === '#symbol') b += (n - 1) * Math.log2(13);
+    return Math.round(b);
+  }
+  const P = genPools(o);
+  return Math.round(Math.min(100, Math.max(4, +o.length || 20)) * Math.log2((P.lower + P.upper + P.digits + P.symbols).length || 26));
+}
+function bitsLevel(bits) {
+  const lvl = bits < 40 ? 1 : bits < 60 ? 2 : bits < 80 ? 3 : 4;
+  return { bits, lvl, label: ['', 'Debole', 'Discreta', 'Buona', 'Ottima'][lvl] };
+}
+// Cronologia delle password generate (elemento interno "_genhist" nel vault principale, ultime 30).
+const GENHIST_MAX = 30;
+function genHistory(items) {
+  const it = items.find(i => i.type === '_genhist' && !i.deleted);
+  try { return it ? JSON.parse(it.f.list || '[]') : []; } catch { return []; }
+}
+function genHistoryAdd(items, pw, site) {
+  if (!pw) return;
+  let it = items.find(i => i.type === '_genhist' && !i.deleted);
+  if (!it) { it = makeItem('_genhist', 'Cronologia generatore', { list: '[]' }); items.push(it); }
+  const list = genHistory(items).filter(e => e.pw !== pw);
+  list.unshift({ pw, t: now(), site: site || '' });
+  it.f = { ...it.f, list: JSON.stringify(list.slice(0, GENHIST_MAX)) };
+  it.updated = now();
+}
+function genHistoryClear(items) {
+  const it = items.find(i => i.type === '_genhist' && !i.deleted);
+  if (it) { it.f = { ...it.f, list: '[]' }; it.updated = now(); }
+}
 const COMMON = new Set(['password', 'password1', '123456', '12345678', '123456789', '1234567890', 'qwerty', 'qwerty123',
   'iloveyou', 'admin', 'welcome', 'letmein', '111111', '000000', 'abc123', 'juventus', 'napoli', 'milan', 'inter',
   'ciao123', 'ciao', 'amore', 'roma', 'passw0rd', 'asdfgh', 'qwertyuiop']);

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Crea le versioni dell'estensione per Chrome/Edge e Firefox in dist/extension/."""
+"""Crea le versioni dell'estensione in dist/extension/.
+
+  chromium  Chrome, Edge, Brave, Opera, Vivaldi, Arc... da installare a mano (ID fisso grazie a "key")
+  store     stessa estensione senza "key", da caricare su Chrome Web Store, Edge Add-ons, Opera Add-ons
+  firefox   Firefox per computer e per Android (da firmare su addons.mozilla.org)
+"""
 import json, os, shutil, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -7,8 +12,9 @@ sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from configure import load  # noqa: E402
 
 SRC = os.path.join(ROOT, 'extension', 'src')
-SHARED = ['core.js', 'cloud.js', 'vaults.js', 'passkey.js']
-BG = SHARED + ['bg.js']
+SHARED = ['core.js', 'words.js', 'cloud.js', 'vaults.js', 'passkey.js']
+BG = ['config.js'] + SHARED + ['bg.js']
+BROWSERS = ('chromium', 'store', 'firefox')
 
 
 def manifest(browser, cfg):
@@ -29,13 +35,14 @@ def manifest(browser, cfg):
         ],
         'commands': {'fill-login': {'suggested_key': {'default': 'Ctrl+Shift+L', 'mac': 'Command+Shift+L'}, 'description': 'Mostra i login per questo sito'}},
     }
-    if browser == 'chrome':
+    if browser != 'firefox':
         m['background'] = {'service_worker': 'sw.js'}
-        if cfg.get('chromeKey'):
+        if browser == 'chromium' and cfg.get('chromeKey'):
             m['key'] = cfg['chromeKey']  # ID fisso, così l'indirizzo di ritorno OAuth non cambia
     else:
         m['background'] = {'scripts': BG}
-        m['browser_specific_settings'] = {'gecko': {'id': cfg['firefoxId'], 'strict_min_version': '128.0'}}
+        m['browser_specific_settings'] = {'gecko': {'id': cfg['firefoxId'], 'strict_min_version': '128.0'},
+                                          'gecko_android': {'strict_min_version': '128.0'}}
     return m
 
 
@@ -43,12 +50,14 @@ def build():
     cfg = load()
     out_root = os.path.join(ROOT, 'dist', 'extension')
     shutil.rmtree(out_root, ignore_errors=True)
-    for browser in ('chrome', 'firefox'):
+    for browser in BROWSERS:
         out = os.path.join(out_root, browser)
         shutil.copytree(SRC, out)
         for f in SHARED:
             shutil.copy(os.path.join(ROOT, 'web', 'js', f), os.path.join(out, f))
-        if browser == 'chrome':
+        with open(os.path.join(out, 'config.js'), 'w') as fh:
+            fh.write('self.SCRIGNO_CONFIG = ' + json.dumps({'pagesUrl': cfg.get('pagesUrl', ''), 'version': cfg['version']}) + ';\n')
+        if browser != 'firefox':
             with open(os.path.join(out, 'sw.js'), 'w') as fh:
                 fh.write('importScripts(' + ', '.join(repr(f) for f in BG) + ');\n')
         with open(os.path.join(out, 'manifest.json'), 'w') as fh:

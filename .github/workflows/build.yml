@@ -36,8 +36,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/configure.py && python3 tools/build_extension.py
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # Firma gratuita di Mozilla (distribuzione autonoma, non pubblicata nello store) se ci sono le chiavi API AMO.
+      # Una versione già firmata non si può rifirmare: in quel caso il passaggio fallisce senza bloccare la build.
+      - name: Firma l'estensione Firefox
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          [ -n "$AMO_JWT_ISSUER" ] || { echo "Chiavi AMO non impostate: salto la firma"; exit 0; }
+          VERSION=$(python3 -c "import json;print(json.load(open('scrigno.config.json'))['version'])")
+          npx --yes web-ext@8 sign --channel unlisted --source-dir dist/extension/firefox --artifacts-dir dist/xpi \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --approval-timeout 1200000
+          mv dist/xpi/*.xpi "dist/extension/scrigno-firefox-$VERSION.xpi"
       - uses: actions/upload-artifact@v4
-        with: { name: estensione, path: 'dist/extension/*.zip' }
+        with:
+          name: estensione
+          path: |
+            dist/extension/*.zip
+            dist/extension/*.xpi
 
   pages:
     name: Web app e pagina di accesso (GitHub Pages)
@@ -211,6 +231,7 @@ jobs:
             files/*.AppImage
             files/*.deb
             files/*.zip
+            files/*.xpi
           make_latest: true
           body: |
             File da scaricare:
@@ -218,5 +239,7 @@ jobs:
             - **Windows**: `Scrigno-…-win-x64.exe`
             - **macOS**: `…-mac-arm64.dmg` (Apple Silicon) o `…-mac-x64.dmg` (Intel)
             - **Linux**: `.AppImage` oppure `.deb`
-            - **Estensione**: `scrigno-chrome-….zip` (Chrome/Edge) e `scrigno-firefox-….zip`
+            - **Estensione per Chrome, Edge, Brave, Opera, Vivaldi**: `scrigno-chromium-….zip`
+            - **Estensione per Firefox (computer e Android)**: `scrigno-firefox-….xpi` (firmata) o `scrigno-firefox-….zip`
+            - **Per gli store** (Chrome Web Store, Edge Add-ons, Opera Add-ons): `scrigno-store-….zip`
             - **iPhone/iPad e web**: https://aibcatania-png.github.io/Scrigno/

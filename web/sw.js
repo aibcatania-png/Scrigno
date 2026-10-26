@@ -1,6 +1,6 @@
 // Service worker: rende la web app disponibile offline. Non tocca le richieste verso il cloud.
-const CACHE = 'scrigno-v6';
-const ASSETS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/config.js', 'js/core.js', 'js/icons.js', 'js/native.js', 'js/cloud.js', 'js/vaults.js', 'js/app.js',
+const CACHE = 'scrigno-v7';
+const ASSETS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/config.js', 'js/core.js', 'js/words.js', 'js/icons.js', 'js/native.js', 'js/cloud.js', 'js/vaults.js', 'js/app.js',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

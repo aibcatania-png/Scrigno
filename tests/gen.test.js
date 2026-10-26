@@ -1,0 +1,56 @@
+// Generatore in stile Enpass nella web app: modalità, minimi, cronologia salvata nel vault.
+const { chromium } = require(process.env.PW || 'playwright');
+const http = require('http'), fs = require('fs'), path = require('path');
+const root = path.join(__dirname, '..', 'web');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+const srv = http.createServer((q, s) => {
+  const p = path.join(root, decodeURIComponent(new URL(q.url, 'http://x').pathname).replace(/\/$/, '/index.html'));
+  fs.readFile(p, (e, d) => { if (e) { s.writeHead(404); s.end(); } else { s.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); s.end(d); } });
+}).listen(0);
+let fails = 0;
+const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
+const shots = process.env.SHOTS;
+(async () => {
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('dialog', d => d.accept());
+  await page.goto(`http://127.0.0.1:${srv.address().port}/`);
+  await page.fill('input[name=pw]', 'una-frase-molto-lunga-42');
+  await page.fill('input[name=pw2]', 'una-frase-molto-lunga-42');
+  await page.check('input[name=ack]');
+  await page.click('button[type=submit]');
+  await page.waitForSelector('.shell', { timeout: 20000 });
+  await page.click('[data-act=section][data-k=gen]');
+  await page.waitForSelector('#genOut');
+  let pw = await page.textContent('#genOut');
+  ok(pw.length === 20 && /\d.*\d/.test(pw), 'casuale: 20 caratteri con almeno 2 cifre');
+  ok(await page.$('#genOut .cd') && await page.$('#genOut .cs'), 'cifre e simboli colorati');
+  await page.$eval('input[data-gen=length]', el => { el.value = 32; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  ok((await page.textContent('#genOut')).length === 32, 'lunghezza dallo slider');
+  await page.click('[data-act=gen-step][data-k=minDigits][data-d="1"]');
+  ok((await page.textContent('[data-act=gen-step][data-k=minDigits] + b, .stepper:has([data-k=minDigits]) b')).trim() === '3', 'minimo cifre +1');
+  if (shots) await page.screenshot({ path: path.join(shots, 'gen-random.png') });
+  await page.click('[data-act=gen-mode][data-k=words]');
+  pw = await page.textContent('#genOut');
+  ok(pw.split('-').length === 5 && /^[A-Z]/.test(pw), 'pronunciabile: 5 parole separate da trattino ' + pw);
+  await page.selectOption('select[data-gen=sep]', ' ');
+  ok((await page.textContent('#genOut')).trim().split(/\s+/).length === 5, 'separatore spazio');
+  await page.click('[data-act=gen-copy]');
+  await page.waitForSelector('.genhist .hrow');
+  ok((await page.$$('.genhist .hrow')).length === 1, 'cronologia: password copiata registrata');
+  if (shots) await page.screenshot({ path: path.join(shots, 'gen-words.png') });
+  await page.click('[data-act=lock]').catch(() => page.keyboard.press('Control+l'));
+  await page.reload();
+  await page.waitForSelector('#mp, .shell');
+  if (await page.$('#mp')) { await page.fill('#mp', 'una-frase-molto-lunga-42'); await page.keyboard.press('Enter'); }
+  await page.waitForSelector('.shell', { timeout: 20000 });
+  await page.click('[data-act=section][data-k=gen]');
+  ok(await page.$('[data-act=gen-mode][data-k=words].on') && (await page.$$('.genhist .hrow')).length === 1, 'opzioni e cronologia restano dopo il blocco');
+  ok(!errors.length, 'nessun errore JS ' + errors.join(' | '));
+  await browser.close(); srv.close();
+  console.log(fails ? `\n${fails} FALLITI` : '\nTUTTI OK');
+  process.exit(fails ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

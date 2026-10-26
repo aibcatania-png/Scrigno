@@ -120,7 +120,7 @@ function renderUnlocked() {
   const tabs = `<div class="tabs">${[['list', 'Vault'], ['gen', 'Generatore'], ['settings', 'Impostazioni']].map(([k, l]) => `<button data-a="view" data-k="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   let body = '';
   if (view === 'list') body = `<input id="q" type="search" placeholder="Cerca…" value="${esc(q)}" autocomplete="off"><div id="lst">${renderList()}</div>`;
-  if (view === 'gen') body = `<div class="card"><div class="gen" id="genOut"></div><div class="row"><button class="btn pri" data-a="gen-copy">Copia</button><button class="btn" data-a="gen-new">Rigenera</button></div></div>`;
+  if (view === 'gen') body = '<div id="genBox"></div>';
   if (view === 'settings') {
     body = `<div class="card"><h2>Sincronizzazione</h2>
       ${ST.sync ? `<p>Collegato a <b>${esc(ST.sync.name)}</b>${ST.syncErr ? `<br><span class="err">${esc(ST.syncErr)}</span>` : ''}</p>
@@ -139,9 +139,31 @@ function render() {
   $('#app').innerHTML = header() + main;
   if ($('#mp')) $('#mp').focus();
   if ($('#q')) $('#q').focus();
-  if ($('#genOut')) genNew();
+  if ($('#genBox')) renderGen();
 }
-async function genNew() { const o = $('#genOut'); if (o) o.textContent = await send({ type: 'generate' }); }
+
+// ---------------------------------------------------------------- generatore (come nella app)
+let GS = null, genVal = '';
+const colorPw = pw => [...pw].map(c => /\d/.test(c) ? `<span class="cd">${esc(c)}</span>` : /[A-Za-z]/.test(c) ? esc(c) : `<span class="cs">${esc(c)}</span>`).join('');
+const tog = (k, l, n) => `<div class="gopt"><label class="chk"><input type="checkbox" data-g="${k}" ${GS.opts[k] ? 'checked' : ''}> ${l}</label>${n
+  ? `<span class="step"><button data-a="gstep" data-k="${n}" data-d="-1">−</button><b>${GS.opts[n]}</b><button data-a="gstep" data-k="${n}" data-d="1">+</button></span>` : ''}</div>`;
+async function renderGen(keep) {
+  GS = await send({ type: 'genState' });
+  if (!keep || !genVal) genVal = await send({ type: 'generate' });
+  const o = GS.opts, w = o.mode === 'words';
+  $('#genBox').innerHTML = `<div class="seg"><button data-a="gmode" data-k="random" class="${w ? '' : 'on'}">Casuale</button><button data-a="gmode" data-k="words" class="${w ? 'on' : ''}">Pronunciabile</button></div>
+    <div class="card"><div class="gen" id="genOut">${colorPw(genVal)}</div><div class="meter" data-lvl="${GS.bits.lvl}">${GS.bits.label} · ${GS.bits.bits} bit</div>
+      <div class="row"><button class="btn pri" data-a="gen-copy">Copia</button><button class="btn" data-a="gen-new">Rigenera</button></div></div>
+    <div class="card">${w ? `<label class="lbl"><span>Parole: <b>${o.words}</b></span><input type="range" min="2" max="12" value="${o.words}" data-g="words"></label>
+      <label class="lbl">Separate da<select data-g="sep">${GS.seps.map(([v, l]) => `<option value="${esc(v)}" ${o.sep === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${tog('wordCaps', 'Iniziali maiuscole')}${tog('wordDigit', 'Una cifra')}
+      <label class="lbl">Lingua<select data-g="lang"><option value="it" ${o.lang === 'it' ? 'selected' : ''}>Italiano</option><option value="en" ${o.lang === 'en' ? 'selected' : ''}>Inglese</option></select></label>`
+    : `<label class="lbl"><span>Lunghezza: <b>${o.length}</b></span><input type="range" min="4" max="100" value="${o.length}" data-g="length"></label>
+      ${tog('upper', 'Maiuscole', 'minUpper')}${tog('digits', 'Cifre', 'minDigits')}${tog('symbols', 'Simboli', 'minSymbols')}${tog('noAmbig', 'Evita caratteri ambigui')}
+      <label class="lbl">Escludi caratteri<input data-g="exclude" value="${esc(o.exclude)}" autocomplete="off" spellcheck="false"></label>`}</div>
+    ${GS.history.length ? `<div class="card"><h2>Cronologia</h2>${GS.history.map((e, i) => `<div class="hrow"><code>${colorPw(e.pw)}</code><button class="btn sm" data-a="ghist" data-i="${i}">Copia</button></div>`).join('')}</div>` : ''}`;
+}
+async function genSet(opts) { await send({ type: 'genSet', opts }); await renderGen(); }
 
 async function copyText(text) {
   await navigator.clipboard.writeText(text);
@@ -161,8 +183,11 @@ document.addEventListener('click', async e => {
       case 'view': view = b.dataset.k; render(); break;
       case 'fill': await send({ type: 'fillTab', id: b.dataset.id, tabId: tab.id }); window.close(); break;
       case 'copy': await copyText(await send({ type: 'secret', id: b.dataset.id, field: b.dataset.f })); break;
-      case 'gen-new': await genNew(); break;
-      case 'gen-copy': await copyText($('#genOut').textContent); break;
+      case 'gen-new': await renderGen(); break;
+      case 'gen-copy': await copyText(genVal); await send({ type: 'genUsed', pw: genVal, site: tab && tab.url ? new URL(tab.url).hostname : '' }).catch(() => {}); await renderGen(true); break;
+      case 'gmode': await genSet({ mode: b.dataset.k }); break;
+      case 'gstep': await genSet({ [b.dataset.k]: Math.max(1, Math.min(20, GS.opts[b.dataset.k] + +b.dataset.d)) }); break;
+      case 'ghist': await copyText(GS.history[+b.dataset.i].pw); break;
       case 'sync': b.disabled = true; await send({ type: 'syncNow' }); toast('Sincronizzato'); await refresh(); break;
       case 'disconnect': if (confirm('Scollegare il cloud?')) { await send({ type: 'disconnect' }); await refresh(); } break;
       case 'connect': b.disabled = true; b.textContent = 'Accesso…'; await send({ type: 'connect', cfg: readCloud(), mode: 'link' }); toast('Cloud collegato'); await refresh(); break;
@@ -191,11 +216,13 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'q') { q = e.target.value; $('#lst').innerHTML = renderList(); }
+  if (e.target.dataset.g && e.target.type === 'range') e.target.previousElementSibling.querySelector('b').textContent = e.target.value;
 });
 document.addEventListener('change', async e => {
   const t = e.target;
   try {
     if (t.id === 'prov') $('#pf').innerHTML = providerFields(t.value);
+    if (t.dataset.g) await genSet({ [t.dataset.g]: t.type === 'checkbox' ? t.checked : t.type === 'range' ? +t.value : t.value });
     if (t.id === 'autolock') { await send({ type: 'settings', settings: { autoLockMin: +t.value } }); toast('Salvato'); }
     if (t.id === 'fileIn' && t.files[0]) {
       const text = await t.files[0].text();

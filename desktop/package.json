@@ -1,7 +1,7 @@
 {
   "name": "scrigno",
   "productName": "Scrigno",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Password manager con compilazione automatica, passkey e sincronizzazione sul tuo cloud",
   "author": { "name": "Scrigno", "email": "scrigno@users.noreply.github.com" },
   "homepage": "https://github.com/",

@@ -98,13 +98,33 @@ function updateBadge() {
 }
 
 // ---------------------------------------------------------------- cloud
+// Senza l'API identity (es. Opera) il login si apre in una scheda e si legge l'indirizzo di ritorno
+// sulla pagina oauth.html della web app.
+const HAS_IDENTITY = !!(api.identity && api.identity.launchWebAuthFlow && api.identity.getRedirectURL);
+const PAGES_URL = (self.SCRIGNO_CONFIG && self.SCRIGNO_CONFIG.pagesUrl) || '';
+function tabAuth(url, redirect) {
+  return new Promise((resolve, reject) => {
+    let tabId = null;
+    const keep = setInterval(() => api.runtime.getPlatformInfo().catch(() => {}), 20000);
+    const done = fn => { clearInterval(keep); api.tabs.onUpdated.removeListener(upd); api.tabs.onRemoved.removeListener(rem); fn(); };
+    const upd = (id, info) => {
+      if (id !== tabId || !info.url || !info.url.startsWith(redirect)) return;
+      done(() => { api.tabs.remove(id).catch(() => {}); resolve(info.url); });
+    };
+    const rem = id => { if (id === tabId) done(() => reject(new Error('Accesso annullato.'))); };
+    api.tabs.onUpdated.addListener(upd);
+    api.tabs.onRemoved.addListener(rem);
+    api.tabs.create({ url }).then(t => { tabId = t.id; }, e => done(() => reject(e)));
+  });
+}
 Cloud.env = {
   fetch: (u, o) => fetch(u, o),
-  redirect: () => api.identity.getRedirectURL('oauth'),
+  redirect: () => HAS_IDENTITY ? api.identity.getRedirectURL('oauth') : PAGES_URL + 'oauth.html',
   folder: false,
   begin: () => null,
   async authorize(h, url, state) {
-    const back = await api.identity.launchWebAuthFlow({ url, interactive: true });
+    if (!HAS_IDENTITY && !PAGES_URL) throw new Error('Questo browser non supporta l\'accesso ai cloud dall\'estensione.');
+    const back = HAS_IDENTITY ? await api.identity.launchWebAuthFlow({ url, interactive: true }) : await tabAuth(url, PAGES_URL + 'oauth.html');
     const u = new URL(back);
     const p = Object.fromEntries(new URLSearchParams(u.search));
     Object.assign(p, Object.fromEntries(new URLSearchParams(u.hash.slice(1))));
@@ -351,7 +371,18 @@ const handlers = {
     touch();
     return true;
   },
-  async generate() { return genPassword((await local.get('gen')) || GEN_DEFAULT); },
+  async generate() { return genPassword(await local.get('gen')); },
+  async genState() {
+    const o = genOpts(await local.get('gen'));
+    return { opts: o, seps: GEN_SEPS, bits: bitsLevel(genBits(o)), history: B.dek ? genHistory(B.items).slice(0, 10) : [] };
+  },
+  async genSet({ opts }) { await local.set('gen', genOpts({ ...genOpts(await local.get('gen')), ...opts })); return true; },
+  async genUsed({ pw, site }) {
+    if (!B.dek || !pw) return false;
+    genHistoryAdd(B.items, pw, site || '');
+    await persist();
+    return true;
+  },
   async settings({ settings }) { B.settings = { ...B.settings, ...settings }; await local.set('settings', B.settings); return true; },
   async wipe() { await lock(); await local.del('vault'); await local.del('sync'); B.file = null; return true; },
   async importFile({ text, kind, password }) {
@@ -433,7 +464,11 @@ const handlers = {
     await doSave(p);
     return true;
   },
-  async pageGenerate() { return genPassword((await local.get('gen')) || GEN_DEFAULT); },
+  async pageGenerate(msg, sender) {
+    const pw = genPassword(await local.get('gen'));
+    if (B.dek) { genHistoryAdd(B.items, pw, baseDomain(hostOf(sender.url || ''))); persist().catch(() => {}); }
+    return pw;
+  },
   async passkey(msg, s) { await ensureLoaded(); return handlePasskey(msg, s); },
 };
 

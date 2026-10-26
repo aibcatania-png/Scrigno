@@ -887,27 +887,69 @@ async function loadDirs() {
   }
 }
 
-function renderGen() {
-  if (!S.genVal) S.genVal = genPassword(S.gen);
+function genCfg() {
+  if (!S.genInit) { S.gen = genOpts(S.settings && S.settings.gen); S.genInit = true; }
+  return S.gen;
+}
+function saveGen() { S.settings.gen = { ...S.gen }; saveSettings(); }
+// Caratteri colorati come in Enpass: cifre e simboli si distinguono dalle lettere.
+function colorPw(pw) {
+  return [...pw].map(c => /\d/.test(c) ? `<span class="cd">${esc(c)}</span>` : /[A-Za-z]/.test(c) ? esc(c) : `<span class="cs">${c === ' ' ? '&nbsp;' : esc(c)}</span>`).join('');
+}
+async function genUsed(pw, site) {
+  if (!pw || !S.dek) return;
+  genHistoryAdd(S.items, pw, site);
+  try { await saveVault(); } catch { /* ignora */ }
+}
+function genToggle(k, label, countKey) {
   const g = S.gen;
+  return `<div class="gen-opt"><label class="switch"><input type="checkbox" data-gen="${k}" ${g[k] ? 'checked' : ''}><span></span>${label}</label>
+    ${countKey ? `<span class="stepper ${g[k] ? '' : 'off'}"><button type="button" data-act="gen-step" data-k="${countKey}" data-d="-1" aria-label="Meno">−</button><b>${g[countKey]}</b><button type="button" data-act="gen-step" data-k="${countKey}" data-d="1" aria-label="Più">+</button></span>` : ''}</div>`;
+}
+function renderGen() {
+  const g = genCfg();
+  if (!S.genVal) S.genVal = genPassword(g);
+  const words = g.mode === 'words';
+  const opts = words ? `
+      <label class="lbl"><span>Parole: <b>${g.words}</b></span><input type="range" min="2" max="12" value="${g.words}" data-gen="words"></label>
+      <label class="lbl">Separate da<select data-gen="sep">${GEN_SEPS.map(([v, l]) => `<option value="${esc(v)}" ${g.sep === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${genToggle('wordCaps', 'Maiuscole (iniziale di ogni parola)')}
+      ${genToggle('wordDigit', 'Cifre (un numero in una parola)')}
+      ${genToggle('noAmbig', 'Evita caratteri ambigui (I l 1 O 0)')}
+      <label class="lbl">Lingua delle parole<select data-gen="lang"><option value="it" ${g.lang === 'it' ? 'selected' : ''}>Italiano</option><option value="en" ${g.lang === 'en' ? 'selected' : ''}>Inglese</option></select></label>`
+    : `
+      <label class="lbl"><span>Lunghezza: <b>${g.length}</b></span><input type="range" min="4" max="100" value="${g.length}" data-gen="length"></label>
+      ${genToggle('upper', 'Maiuscole (A-Z)', 'minUpper')}
+      ${genToggle('digits', 'Cifre (0-9)', 'minDigits')}
+      ${genToggle('symbols', 'Simboli (!@#…)', 'minSymbols')}
+      ${genToggle('noAmbig', 'Evita caratteri ambigui (I l 1 O 0)')}
+      <details class="more"${g.exclude ? ' open' : ''}><summary>Altre opzioni</summary>
+        <label class="lbl">Escludi questi caratteri<input data-gen="exclude" value="${esc(g.exclude)}" autocomplete="off" spellcheck="false" placeholder="es. {}[]&lt;&gt;"></label>
+        <p class="hint">I numeri accanto a Maiuscole, Cifre e Simboli sono il minimo garantito.</p>
+      </details>`;
+  const hist = S.dek ? genHistory(S.items) : [];
   return `<div class="pagewrap"><h1>Generatore di password</h1>
+    <div class="seg" role="tablist">
+      <button data-act="gen-mode" data-k="random" class="${words ? '' : 'on'}">Casuale</button>
+      <button data-act="gen-mode" data-k="words" class="${words ? 'on' : ''}">Pronunciabile</button></div>
     <div class="card genout"><code id="genOut"></code><span class="meter" id="genMeter"></span>
-      <div class="row-btns"><button class="btn primary" data-act="gen-copy">Copia</button><button class="btn" data-act="gen-new">Rigenera</button></div></div>
-    <div class="card stack">
-      <label class="lbl">Lunghezza: <b id="genLen">${g.length}</b><input type="range" min="8" max="64" value="${g.length}" data-gen="length"></label>
-      ${[['lower', 'Minuscole (a-z)'], ['upper', 'Maiuscole (A-Z)'], ['digits', 'Numeri (0-9)'], ['symbols', 'Simboli (!@#…)'], ['noAmbig', 'Escludi caratteri ambigui (I l 1 O 0)']]
-        .map(([k, l]) => `<label class="chk"><input type="checkbox" data-gen="${k}" ${g[k] ? 'checked' : ''}> ${l}</label>`).join('')}
+      <div class="row-btns"><button class="btn primary" data-act="gen-copy">${ic('copy')} Copia</button><button class="btn" data-act="gen-new">${ic('refresh')} Rigenera</button></div></div>
+    <div class="card stack">${opts}</div>
+    <div class="card stack"><div class="card-head"><h3>Cronologia</h3>${hist.length ? '<button class="btn small" data-act="gen-hist-clear">Svuota</button>' : ''}</div>
+      ${hist.length ? `<div class="genhist">${hist.map((e, i) => `<div class="hrow"><code class="mono">${colorPw(e.pw)}</code>
+        <span class="hint">${new Date(e.t).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}${e.site ? ' · ' + esc(e.site) : ''}</span>
+        <button class="icon" data-act="gen-hist-copy" data-i="${i}" title="Copia">${ic('copy')}</button></div>`).join('')}</div>`
+        : '<p class="hint">Le password che copi o inserisci da qui compaiono in questo elenco (ultime 30), salvate cifrate nel vault.</p>'}
     </div></div>`;
 }
 function updateGenOut() {
   const out = $('#genOut');
   if (!out) return;
-  out.textContent = S.genVal;
-  const s = strength(S.genVal);
+  out.innerHTML = colorPw(S.genVal);
+  const s = bitsLevel(genBits(S.gen));
   const m = $('#genMeter');
   m.dataset.lvl = s.lvl;
-  m.textContent = `${s.label} · ~${s.bits} bit`;
-  $('#genLen').textContent = S.gen.length;
+  m.textContent = `${s.label} · ${s.bits} bit · ${S.genVal.length} caratteri`;
 }
 
 function redirectHint() {
@@ -1398,7 +1440,13 @@ async function onClick(e) {
     }
     case 'copy-totp': { const x = findItem(b.dataset.id); await copy(await totp(parseTotp(x.f.totp)), 'Codice copiato'); break; }
     case 'toggle-input': { const inp = b.parentElement.querySelector('input'); inp.type = inp.type === 'password' ? 'text' : 'password'; break; }
-    case 'gen-into': { const inp = b.parentElement.querySelector('input'); inp.value = genPassword(S.gen); inp.type = 'text'; updateMeter(inp); break; }
+    case 'gen-into': {
+      const inp = b.parentElement.querySelector('input');
+      inp.value = genPassword(genCfg()); inp.type = 'text'; updateMeter(inp);
+      const u = document.querySelector('[name=f_url]');
+      await genUsed(inp.value, u && u.value ? baseDomain(hostOf(u.value)) : '');
+      break;
+    }
     case 'add-custom': $('#customList').insertAdjacentHTML('beforeend', customRow()); break;
     case 'del-custom': b.closest('.crow').remove(); break;
     case 'lock': lock(); break;
@@ -1407,8 +1455,16 @@ async function onClick(e) {
     case 'sync':
       if (!hasAnySync()) { S.view = { ...S.view, section: 'settings', id: null, edit: false, newType: null }; renderMain(); } else { await syncNow(false); if (S.view.section === 'settings') renderMain(); }
       break;
-    case 'gen-new': S.genVal = genPassword(S.gen); updateGenOut(); break;
-    case 'gen-copy': await copy(S.genVal); break;
+    case 'gen-new': S.genVal = genPassword(genCfg()); updateGenOut(); break;
+    case 'gen-copy': await copy(S.genVal); await genUsed(S.genVal); renderMain(); break;
+    case 'gen-mode': genCfg().mode = b.dataset.k; saveGen(); S.genVal = genPassword(S.gen); renderMain(); break;
+    case 'gen-step': {
+      const g = genCfg(), k = b.dataset.k;
+      g[k] = Math.max(1, Math.min(20, (+g[k] || 0) + +b.dataset.d));
+      saveGen(); S.genVal = genPassword(g); renderMain(); break;
+    }
+    case 'gen-hist-copy': await copy((genHistory(S.items)[+b.dataset.i] || {}).pw); break;
+    case 'gen-hist-clear': if (confirm('Svuotare la cronologia del generatore?')) { genHistoryClear(S.items); await saveVault(); renderMain(); } break;
     case 'bio-unlock': await bioUnlock(); break;
     case 'bio-on': await bioEnroll(); toast('Sblocco biometrico attivato'); renderMain(); break;
     case 'bio-off': await bioReset(); renderMain(); toast('Sblocco biometrico disattivato'); break;
@@ -1622,9 +1678,13 @@ function onInput(e) {
   }
   if (t.name === 'f_password' || t.name === 'pw' || t.name === 'nw') { updateMeter(t); return; }
   if (t.dataset.gen) {
-    S.gen[t.dataset.gen] = t.type === 'checkbox' ? t.checked : +t.value;
-    S.genVal = genPassword(S.gen);
-    updateGenOut();
+    const g = genCfg(), k = t.dataset.gen;
+    g[k] = t.type === 'checkbox' ? t.checked : t.type === 'range' ? +t.value : t.value;
+    saveGen();
+    S.genVal = genPassword(g);
+    if (t.type === 'range') { t.previousElementSibling.querySelector('b').textContent = t.value; updateGenOut(); }
+    else if (t.type === 'checkbox' || t.tagName === 'SELECT') renderMain();
+    else updateGenOut();
   }
 }
 

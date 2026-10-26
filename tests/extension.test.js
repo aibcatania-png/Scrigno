@@ -1,7 +1,7 @@
 // Prova l'estensione in Chromium: creazione vault, compilazione, salvataggio login, passkey.
 const { chromium } = require(process.env.PW || 'playwright');
 const http = require('http'), path = require('path'), fs = require('fs'), os = require('os');
-const EXT = path.join(__dirname, '..', 'dist', 'extension', 'chrome');
+const EXT = path.join(__dirname, '..', 'dist', 'extension', 'chromium');
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 
@@ -58,6 +58,21 @@ window.login = async () => {
   await opt.click('#createForm button');
   await opt.waitForSelector('#q');
   ok(true, 'vault creato dalle opzioni');
+  // generatore nel popup/opzioni
+  await opt.click('[data-a=view][data-k=gen]');
+  await opt.waitForSelector('#genOut');
+  ok((await opt.textContent('#genOut')).length === 20, 'estensione: generatore casuale');
+  await opt.click('[data-a=gmode][data-k=words]');
+  await opt.waitForSelector('[data-a=gmode][data-k=words].on');
+  ok((await opt.textContent('#genOut')).split('-').length === 5, 'estensione: generatore pronunciabile');
+  await opt.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await opt.click('[data-a=gen-copy]');
+  await opt.waitForSelector('.hrow');
+  ok(true, 'estensione: cronologia generatore');
+  if (process.env.SHOTS) await opt.screenshot({ path: path.join(process.env.SHOTS, 'ext-gen.png') });
+  await opt.click('[data-a=gmode][data-k=random]');
+  await opt.click('[data-a=view][data-k=list]');
+  await opt.waitForSelector('#q');
 
   // CDP per cliccare dentro lo shadow DOM chiuso
   async function clickShadowText(page, text) {
