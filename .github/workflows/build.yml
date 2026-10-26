@@ -16,7 +16,8 @@ env:
 jobs:
   test:
     name: Test (web, estensione)
-    runs-on: ubuntu-latest
+    # Playwright non supporta ancora Ubuntu 26 (nuovo ubuntu-latest).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
