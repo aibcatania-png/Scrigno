@@ -87,10 +87,13 @@ window.login = async () => {
       };
       walk(root);
       if (found) {
-        const { model } = await cdp.send('DOM.getBoxModel', { backendNodeId: found.backendNodeId }).catch(() => cdp.send('DOM.getBoxModel', { nodeId: found.parentId }));
-        const q = model.content;
-        await page.mouse.click((q[0] + q[4]) / 2, (q[1] + q[5]) / 2);
-        return true;
+        // il menu può essere ridisegnato proprio ora: in quel caso si riprova
+        const r = await cdp.send('DOM.getBoxModel', { backendNodeId: found.backendNodeId }).catch(() => cdp.send('DOM.getBoxModel', { nodeId: found.parentId })).catch(() => null);
+        if (r) {
+          const q = r.model.content;
+          await page.mouse.click((q[0] + q[4]) / 2, (q[1] + q[5]) / 2);
+          return true;
+        }
       }
       await page.waitForTimeout(150);
     }
