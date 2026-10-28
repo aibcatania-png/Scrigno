@@ -30,7 +30,7 @@ jobs:
         run: tools/ci_report.sh pw.log 60
       - run: |
           set -o pipefail
-          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && node tests/layout.test.js && python3 tools/build_extension.py && node tests/extension.test.js && node tests/gen.test.js && node tests/settings.test.js; } 2>&1 | tee ci.log
+          { node tests/core.test.js && node tests/ui.test.js && node tests/premium.test.js && node tests/layout.test.js && python3 tools/build_extension.py && node tests/extension.test.js && node tests/gen.test.js && node tests/settings.test.js && node tests/extras.test.js; } 2>&1 | tee ci.log
       - if: failure()
         run: tools/ci_report.sh ci.log
 

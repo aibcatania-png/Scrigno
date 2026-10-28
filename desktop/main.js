@@ -1,6 +1,6 @@
 'use strict';
 /* Scrigno per Windows, macOS e Linux: finestra con la web app, Auto-Type, cartelle sincronizzate, Touch ID. */
-const { app, BrowserWindow, Tray, Menu, ipcMain, protocol, net, shell, clipboard, dialog, globalShortcut,
+const { app, BrowserWindow, Tray, Menu, ipcMain, protocol, net, shell, clipboard, dialog, globalShortcut, screen,
   systemPreferences, safeStorage, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,7 +13,7 @@ let win = null, tray = null, quitting = false, pendingOAuth = null, hotkey = nul
 
 // Preferenze del computer impostate dalla web app (Impostazioni › Generali e Sicurezza).
 const prefsFile = () => path.join(app.getPath('userData'), 'desktop-prefs.json');
-const PREFS_DEFAULT = { tray: true, autostart: false, hotkey: 'A', lockOnClose: true, lockOnSuspend: true, lockOnUserSwitch: true, lockOnScreenLock: true, sysIdleMin: 5 };
+const PREFS_DEFAULT = { assistantDocked: false, tray: true, autostart: false, hotkey: 'A', lockOnClose: true, lockOnSuspend: true, lockOnUserSwitch: true, lockOnScreenLock: true, sysIdleMin: 5 };
 let prefs = { ...PREFS_DEFAULT };
 try { prefs = { ...PREFS_DEFAULT, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }; } catch { /* prima esecuzione */ }
 const startHidden = process.argv.includes('--hidden');
@@ -39,6 +39,7 @@ app.on('second-instance', (e, argv) => {
 function send(name, data) { if (win && !win.isDestroyed()) win.webContents.send('scrigno:event', name, data); }
 function showWindow() {
   if (!win) return createWindow();
+  if (assistantOn) endAssistant();
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -61,7 +62,8 @@ function createWindow() {
     if (prefs.lockOnClose) send('lock');
     if (!quitting && prefs.tray) { e.preventDefault(); win.hide(); }
   });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => { win = null; assistantOn = false; });
+  win.on('blur', () => { if (assistantOn && !prefs.assistantDocked && win.isVisible() && !win.isMinimized()) setTimeout(() => { if (assistantOn && !win.isFocused()) win.hide(); }, 150); });
 }
 
 function createTray() {
@@ -71,21 +73,50 @@ function createTray() {
   tray.setToolTip('Scrigno');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Apri Scrigno', click: showWindow },
+    { label: 'Assistente', click: startAssistant },
     { label: 'Blocca', click: () => send('lock') },
     { type: 'separator' },
     { label: 'Esci', click: () => { quitting = true; app.quit(); } },
   ]));
-  tray.on('click', showWindow);
+  tray.on('click', () => (assistantOn ? win.show() : showWindow()));
 }
 
-// ---------------------------------------------------------------- Auto-Type
-async function startAutotype() {
-  const title = await autotype.activeWindowTitle();
-  showWindow();
-  send('autotype', { title });
+// ---------------------------------------------------------------- Assistente e Auto-Type
+// La scorciatoia apre l'Assistente: la finestra diventa compatta e resta sopra le altre.
+// In modalità ancorata non scompare quando si fa clic altrove.
+let assistantOn = false, normalBounds = null;
+async function startAssistant() {
+  const title = await autotype.activeWindowTitle().catch(() => '');
+  if (!win) createWindow();
+  if (!assistantOn) {
+    normalBounds = win.getBounds();
+    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    const w = 400, h = Math.min(600, area.height - 40);
+    win.setMinimumSize(340, 420);
+    win.setBounds({ x: area.x + area.width - w - 20, y: area.y + 20, width: w, height: h });
+    win.setAlwaysOnTop(true, 'floating');
+    win.setSkipTaskbar(true);
+    assistantOn = true;
+  }
+  win.show(); win.focus();
+  send('assistant', { title });
+}
+function endAssistant(show = true) {
+  if (!assistantOn || !win) return;
+  assistantOn = false;
+  win.setAlwaysOnTop(false);
+  win.setSkipTaskbar(false);
+  win.setMinimumSize(380, 520);
+  if (normalBounds) win.setBounds(normalBounds);
+  send('assistantEnd');
+  if (!show) win.hide();
 }
 function giveFocusBack() {
+  if (assistantOn && prefs.assistantDocked) { if (process.platform === 'darwin') app.hide(); else { win.blur(); win.minimize(); } return; }
   if (process.platform === 'darwin') app.hide(); else if (win) { win.minimize(); win.hide(); }
+}
+function backAfterType() {
+  if (assistantOn && prefs.assistantDocked && win) { win.restore(); win.showInactive(); }
 }
 
 // ---------------------------------------------------------------- funzioni chiamate dalla web app
@@ -162,8 +193,11 @@ const methods = {
     giveFocusBack();
     await new Promise(r => setTimeout(r, process.platform === 'darwin' ? 500 : 350));
     await autotype.typeLogin({ username, password, enter });
+    backAfterType();
     return true;
   },
+  async assistantEnd({ show }) { endAssistant(show !== false); if (show !== false) showWindow(); return true; },
+  async clipboardRead() { return clipboard.readText(); },
   async autotypeCancel() { giveFocusBack(); return true; },
   async desktopPrefs(p) {
     prefs = { ...PREFS_DEFAULT, ...prefs, ...(p || {}) };
@@ -216,7 +250,7 @@ function setHotkey(key) {
   const acc = 'CommandOrControl+Alt+' + k;
   if (hotkey === acc) return;
   if (hotkey) globalShortcut.unregister(hotkey);
-  hotkey = globalShortcut.register(acc, startAutotype) ? acc : null;
+  hotkey = globalShortcut.register(acc, startAssistant) ? acc : null;
   if (!hotkey) console.warn('Scorciatoia Auto-Type non disponibile:', acc);
 }
 function applyPrefs() {

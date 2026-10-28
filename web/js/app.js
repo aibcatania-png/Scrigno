@@ -550,6 +550,7 @@ function vaultPicker() {
 }
 
 function renderMain() {
+  if (S.assistant) { renderAssistant(); return; }
   const v = S.view;
   const page = PAGES.includes(v.section);
   const pageHtml = v.section === 'audit' ? renderAudit() : v.section === 'gen' ? renderGen() : v.section === 'template' ? renderTemplateEditor() : renderSettings();
@@ -686,7 +687,7 @@ function renderDetail() {
   return `<div class="dhead">
       <button class="btn ghost back" data-act="back" title="Indietro">${ic('back')}</button>
       <div class="dtitle">${letterIcon(it, true)}<div><h2>${esc(it.title)}</h2><small class="dmeta">${typeIc(it.type, T)}${esc(T.label)}${S.extra.length ? `<span class="sep"></span>${ic('vault')}${esc(vaultName(vid))}` : ''}</small></div></div>
-      <div class="dactions"><button class="btn ghost favbtn ${it.fav ? 'on' : ''}" data-act="fav" title="${it.fav ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'} (Ctrl+D)">${ic(it.fav ? 'starFill' : 'star')}</button><button class="btn" data-act="edit" title="Modifica (Ctrl+E)">Modifica</button></div>
+      <div class="dactions"><button class="btn ghost favbtn ${it.fav ? 'on' : ''}" data-act="fav" title="${it.fav ? 'Togli dai preferiti' : 'Aggiungi ai preferiti'} (Ctrl+D)">${ic(it.fav ? 'starFill' : 'star')}</button><button class="btn ghost" data-act="share-item" title="Condividi">${ic('share')}<span class="nl">Condividi</span></button><button class="btn" data-act="edit" title="Modifica (Ctrl+E)">Modifica</button></div>
     </div>
     ${(it.tags || []).length ? `<div class="tags">${it.tags.map(t => `<button class="tag" data-act="section" data-k="tag:${esc(t)}">${ic('tag')}${esc(t)}</button>`).join('')}</div>` : ''}
     <div class="fields">${rows + orphan + custom || '<p class="hint">Nessun campo compilato.</p>'}</div>
@@ -705,8 +706,7 @@ function editField(k, label, kind, val = '') {
   return `<label class="lbl">${esc(label)}<span class="inrow">
       <input name="f_${k}" type="${kind === 'secret' ? 'password' : 'text'}" value="${esc(val)}" autocomplete="${isPw ? 'new-password' : 'off'}" spellcheck="false" ${kind === 'url' ? 'inputmode="url"' : ''}${kind === 'totp' ? ' placeholder="JBSW Y3DP… oppure otpauth://…"' : ''}>
       ${kind === 'secret' ? `<button type="button" class="icon" data-act="toggle-input" title="Mostra">${ic('eye')}</button>` : ''}
-      ${isPw ? `<button type="button" class="icon" data-act="gen-into" title="Genera password">${ic('wand')}</button>` : ''}
-    </span>${isPw ? meterHTML() : ''}</label>`;
+    </span>${isPw ? meterHTML() + `<span class="genbtns"><button type="button" class="btn small" data-act="gen-dlg">${ic('wand')} Genera</button><button type="button" class="btn small" data-act="gen-hist-dlg">${ic('refresh')} Cronologia del generatore</button></span>` : ''}</label>`;
 }
 function customRow(c = { label: '', value: '', secret: false }) {
   return `<div class="crow">
@@ -1281,6 +1281,7 @@ async function afterUnlock() {
   renderMain();
   if (hasAnySync()) syncNow(true);
   backupAuto();
+  afterUnlockShare().catch(e => toast(e.message));
 }
 
 async function wipe(force) {
@@ -1430,6 +1431,15 @@ async function onClick(e) {
       inp.value = genPassword(genCfg()); inp.type = 'text'; updateMeter(inp);
       const u = document.querySelector('[name=f_url]');
       await genUsed(inp.value, u && u.value ? baseDomain(hostOf(u.value)) : '');
+      break;
+    }
+    case 'gen-dlg': genDialog(b.closest('.lbl').querySelector('input')); break;
+    case 'gen-hist-dlg': genHistoryDialog(b.closest('.lbl').querySelector('input')); break;
+    case 'share-item': shareDialog(cur()); break;
+    case 'share-receive': {
+      const t = shareTokenOf(await askText('Incolla il link o il testo dell\'elemento condiviso'));
+      if (!t) throw new Error('Non è un elemento condiviso da Scrigno');
+      receiveDialog(t);
       break;
     }
     case 'add-custom': $('#customList').insertAdjacentHTML('beforeend', customRow()); break;
@@ -1626,7 +1636,7 @@ async function onClick(e) {
       render();
       break;
     }
-    default: await settingsClick(act, b);
+    default: if (!(await settingsClick(act, b))) await assistantClick(act, b);
   }
 }
 
@@ -1690,6 +1700,7 @@ async function onSubmit(e) {
 
 function onInput(e) {
   const t = e.target;
+  if (t.id === 'asQ') { S.asQ = t.value; renderAssistant(); return; }
   if (t.id === 'q') {
     S.view.q = t.value;
     $('#items').innerHTML = renderList();
@@ -1723,6 +1734,7 @@ async function onChange(e) {
 }
 
 async function onResume() {
+  if (S.dek) checkClipboardShare();
   if (!S.file) return;
   if (!S.dek) {
     // Il vault potrebbe essere stato creato o sostituito altrove (es. compilazione automatica): ricarica.
@@ -1755,6 +1767,11 @@ function showShortcuts() {
 }
 function onKey(e) {
   if (!S.dek || document.querySelector('dialog[open]')) return;
+  if (S.assistant) {
+    if (e.key === 'Escape') { e.preventDefault(); const c = $('[data-act=as-close]'); if (c) c.click(); }
+    else if (e.key === 'Enter' && e.target.id === 'asQ') { e.preventDefault(); const f = $('[data-act=as-type]'); if (f) f.click(); }
+    return;
+  }
   const mod = e.ctrlKey || e.metaKey;
   const t = e.target;
   const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
@@ -1829,7 +1846,12 @@ async function boot() {
     lastAct = now();
     if (S.dek) showAutotype(); else render();
   });
+  Native.on('assistant', req => { S.assistant = req || { title: '' }; S.asQ = ''; lastAct = now(); render(); });
+  Native.on('assistantEnd', () => { if (S.assistant) { S.assistant = null; S.asQ = ''; render(); } });
+  addEventListener('focus', () => { if (S.dek) checkClipboardShare(); });
   render();
+  shareFromHash();
+  addEventListener('hashchange', shareFromHash);
   if (!Native.available && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }

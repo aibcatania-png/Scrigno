@@ -176,6 +176,18 @@ class MainActivity : AppCompatActivity() {
                 oauthId = null
                 ok(id)
             }
+            "shareText" -> main.post {
+                try {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, a.getString("text"))
+                    startActivity(Intent.createChooser(send, a.optString("title", "Condividi")))
+                    ok(id)
+                } catch (e: Exception) { reply(id, false, err(e)) }
+            }
+            "clipboardRead" -> main.post {
+                val cm = getSystemService(ClipboardManager::class.java)
+                val t = try { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString() ?: "" } catch (e: Exception) { "" }
+                ok(id, JSONObject.quote(t))
+            }
             "copy" -> main.post {
                 val cm = getSystemService(ClipboardManager::class.java)
                 val text = a.getString("text")

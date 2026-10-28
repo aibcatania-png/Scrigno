@@ -396,3 +396,35 @@ details.more[open] { display: flex; flex-direction: column; gap: 10px; }
   .stabs button.on::before { display: none; }
   .srow { padding: 12px 14px; }
 }
+
+/* Generatore e cronologia dentro la modifica */
+.genbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.genbtns .btn .ico { width: 16px; height: 16px; }
+.gendlg { gap: 12px; }
+.genbig { display: block; font: 600 19px/1.45 ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; padding: 14px; background: var(--panel2); border-radius: 10px; word-break: break-all; }
+.gendlg .seg { margin-bottom: 0; align-self: flex-start; }
+.hrow.hrow3 { grid-template-columns: minmax(0, 1fr) auto; }
+.hrow.hrow3 .row-btns { grid-row: 1 / span 2; grid-column: 2; flex-wrap: nowrap; align-items: center; }
+.sharedlg textarea { font-size: 12.5px; word-break: break-all; }
+p.ok { color: var(--ok); font-weight: 600; }
+.dactions .btn .ico { width: 17px; height: 17px; }
+
+/* Assistente (finestra compatta del computer) */
+.assistant { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
+.as-head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 10px 14px; background: var(--side); color: #fff; -webkit-app-region: drag; }
+.as-head svg:first-child { width: 22px; height: 22px; flex: none; }
+.as-head b { flex: 1; font-size: 14px; margin-left: 4px; }
+.as-head .icon { color: var(--side-text); -webkit-app-region: no-drag; }
+.as-head .icon:hover { background: var(--side-2); color: #fff; }
+.as-head .icon.on { color: #fff; background: var(--acc-strong); }
+.as-for { display: flex; align-items: center; gap: 6px; margin: 10px 12px 0; font-size: 12.5px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.as-for .ico { width: 15px; height: 15px; flex: none; }
+#asQ { margin: 10px 12px; width: auto; }
+.as-list { flex: 1; overflow-y: auto; padding: 0 8px; }
+.as-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-radius: 9px; }
+.as-row:hover { background: var(--panel2); }
+.as-row .rtext { flex: 1; min-width: 0; }
+.as-acts { display: flex; align-items: center; gap: 2px; flex: none; }
+.as-acts .icon { width: 30px; height: 30px; }
+.as-acts .ico { width: 17px; height: 17px; }
+.as-enter { padding: 10px 14px; border-top: 1px solid var(--line); }

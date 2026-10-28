@@ -31,6 +31,9 @@ Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Dr
   - **PIN** di sblocco (5 tentativi), blocco quando lo schermo si blocca, il sistema va in sospensione, cambia utente, la finestra si chiude o il sistema è inattivo; svuotamento degli appunti; campi sensibili visibili o nascosti;
   - compilazione: accesso automatico, codice 2FA copiato e inserito, compilazione senza chiedere con un solo login, corrispondenza esatta dell'indirizzo, siti ignorati (salvati nel vault, validi per estensione, Android e altri dispositivi);
   - **backup automatici** cifrati (giornalieri, con ripristino), avvio con il sistema e area di notifica sul computer, scorciatoia Auto-Type configurabile, avviso di aggiornamento.
+- **Condivisione di elementi**: l'elemento viene cifrato con una chiave e inviato come link; chi lo riceve lo apre anche senza Scrigno e, se usa Scrigno, lo aggiunge al suo vault (anche riconoscendolo dagli appunti).
+- **Assistente** sul computer: la scorciatoia apre una finestra compatta sopra le altre per compilare l'app in primo piano o copiare un dato; può restare ancorata sullo schermo.
+- Generatore e **cronologia del generatore** anche dentro la modifica di un elemento (pulsanti sotto la password).
 - Codici 2FA integrati, importazione da Enpass/CSV, sblocco biometrico.
 
 ## Come è fatto

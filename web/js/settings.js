@@ -13,7 +13,7 @@ const SETTINGS_DEFAULT = {
   tray: true, autostart: false, hotkey: 'A',
   lockOnClose: true, lockOnSuspend: true, lockOnUserSwitch: true, lockOnScreenLock: true, sysIdleMin: 5,
   backupAuto: true, backupDir: '', backupKeep: 60, backupLast: 0,
-  updateCheck: true,
+  updateCheck: true, clipboardCheck: false, assistantDocked: false, assistantEnter: true,
 };
 const SET_TABS = [
   ['general', 'Generali', 'sliders'], ['vault', 'Vault', 'vault'], ['security', 'Sicurezza', 'shield'],
@@ -48,7 +48,8 @@ function setGeneral() {
   return `${desk ? group('Esecuzione',
       swRow('tray', 'Riduci nell\'area di notifica', 'Chiudendo la finestra Scrigno resta attivo vicino all\'orologio, pronto per Auto-Type.') +
       swRow('autostart', 'Avvia all\'avvio del sistema', 'Scrigno si apre ridotto nell\'area di notifica quando accendi il computer.') +
-      selRow('hotkey', 'Scorciatoia Auto-Type', `${Native.platform === 'darwin' ? '⌘ ⌥' : 'Ctrl + Alt'} + tasto: compila l'app o la pagina in primo piano.`, keys)) : ''}
+      selRow('hotkey', 'Scorciatoia dell\'Assistente', `${Native.platform === 'darwin' ? '⌘ ⌥' : 'Ctrl + Alt'} + tasto: apre l'Assistente in qualunque punto del sistema, per compilare l'app in primo piano o copiare un dato.`, keys) +
+      swRow('assistantDocked', 'Esegui sempre l\'Assistente in modalità ancorata', 'L\'Assistente resta sullo schermo, sopra le altre finestre, e non scompare quando fai clic al di fuori.')) : ''}
     ${group('Comportamento',
       swRow('searchAll', 'Cerca in tutti gli elementi', 'La ricerca guarda in tutto il vault selezionato, non solo nella categoria aperta.'))}
     ${group('Tastiera',
@@ -72,6 +73,7 @@ function setVault() {
     <div class="card stack"><h3>${ic('download')} Importa ed esporta</h3>
       <div class="row-btns"><button class="btn" data-act="export">Esporta backup cifrato</button>
         <button class="btn" data-act="pick" data-kind="backup">Importa backup Scrigno</button></div>
+      <div class="row-btns"><button class="btn" data-act="share-receive">${ic('share')} Ricevi elemento condiviso</button></div>
       <div class="row-btns"><button class="btn" data-act="pick" data-kind="enpass">Importa da Enpass (.json)</button>
         <button class="btn" data-act="pick" data-kind="csv">Importa CSV</button></div>
       <p class="hint">In Enpass: Impostazioni › Esporta › formato .json. Il CSV può venire da Chrome, Bitwarden o simili. Dopo l'importazione elimina il file esportato, perché non è cifrato. Gli elementi importati finiscono nel vault ${S.extra.length ? 'selezionato in alto nell\'elenco' : 'principale'}.</p>
@@ -161,7 +163,9 @@ function setBackup() {
 }
 
 function setAdvanced() {
-  return `${group('Aggiornamenti',
+  return `${group('Condivisione',
+      swRow('clipboardCheck', 'Controlla gli appunti', 'Se copi il link di un elemento condiviso con Scrigno, l\'app lo riconosce quando torni qui e ti propone di aprirlo.'))}
+    ${group('Aggiornamenti',
       swRow('updateCheck', 'Controlla gli aggiornamenti', 'Avvisa quando su GitHub c\'è una versione nuova di Scrigno.') +
       btnRow('Controlla ora', S.update ? (S.update.newer ? `Disponibile la versione <b>${esc(S.update.version)}</b>` : 'Hai l\'ultima versione.') : '',
         '<button class="btn small" data-act="upd-check">Controlla</button>' + (S.update && S.update.newer ? `<a class="btn small primary" href="${esc(S.update.url)}" target="_blank" rel="noopener" data-act="open-url">Scarica</a>` : '')))}
@@ -200,7 +204,7 @@ function pushDesktopPrefs() {
   const st = S.settings;
   Native.call('desktopPrefs', { tray: !!st.tray, autostart: !!st.autostart, hotkey: st.hotkey || 'A',
     lockOnClose: !!st.lockOnClose, lockOnSuspend: !!st.lockOnSuspend, lockOnUserSwitch: !!st.lockOnUserSwitch,
-    lockOnScreenLock: !!st.lockOnScreenLock, sysIdleMin: +st.sysIdleMin || 0 }).catch(() => {});
+    lockOnScreenLock: !!st.lockOnScreenLock, sysIdleMin: +st.sysIdleMin || 0, assistantDocked: !!st.assistantDocked }).catch(() => {});
 }
 // Le preferenze di compilazione servono anche al servizio Android a vault bloccato.
 function pushAfPrefs() {
