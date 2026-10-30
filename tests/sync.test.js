@@ -34,9 +34,9 @@ const PW = 'una-frase-molto-lunga-42';
     await p.goto(base);
     return p;
   };
-  const cloudForm = async (p, scope = '') => {
+  const cloudForm = async (p, scope = '', url = 'https://dav.test/u/scrigno-vault.json') => {
     await p.selectOption(scope + ' [data-role=prov]', 'webdav');
-    await p.fill(scope + ' [data-c=url]', 'https://dav.test/u/scrigno-vault.json');
+    await p.fill(scope + ' [data-c=url]', url);
     await p.fill(scope + ' [data-c=user]', 'u'); await p.fill(scope + ' [data-c=pass]', 'p');
   };
   // aspetta che il dispositivo abbia caricato nel cloud la sua versione
@@ -120,6 +120,27 @@ const PW = 'una-frase-molto-lunga-42';
   davDelay = 0;
   const both = p => p.waitForFunction(() => ['Insieme PC', 'Insieme telefono'].every(t => live().some(i => i.title === t)), null, { timeout: 30000 }).then(() => true, () => false);
   ok(await both(pc) && await both(ph), 'salvataggi contemporanei: entrambi gli elementi su entrambi i dispositivi');
+  // vault indipendenti: un altro vault, su un altro cloud/account, aggiunto al PC
+  const other = await dev(400);
+  await other.fill('input[name=pw]', 'altra-frase-lunga-99'); await other.fill('input[name=pw2]', 'altra-frase-lunga-99'); await other.check('input[name=ack]'); await other.click('button[type=submit]');
+  await other.waitForSelector('.shell', { timeout: 20000 });
+  await login(other, 'Solo altro');
+  await other.click('[data-act=section][data-k=settings]'); await other.click('.stabs [data-k=vault]');
+  await cloudForm(other, '.sbody', 'https://dav.test/b/scrigno-vault.json'); await other.click('[data-act=connect-cloud]');
+  await other.waitForSelector('text=Collegato a');
+  await pc.click('[data-act=section][data-k=settings]'); await pc.click('.stabs [data-k=vault]');
+  await pc.click('.addcloud summary');
+  await pc.fill('.addcloud [name=acName]', 'Telefono');
+  await pc.fill('.addcloud [name=acPw]', 'altra-frase-lunga-99');
+  await cloudForm(pc, '.addcloud', 'https://dav.test/b/scrigno-vault.json');
+  await pc.click('[data-act=vault-add-cloud]');
+  await pc.waitForSelector('.vrow:has-text("Telefono")');
+  ok(await pc.evaluate(() => S.extra.some(v => v.name === 'Telefono' && v.items.some(i => i.title === 'Solo altro'))), 'vault dal cloud aggiunto come vault indipendente');
+  await pc.evaluate(async () => { const v = S.extra.find(x => x.name === 'Telefono'); v.items.push(makeItem('login', 'Dal PC nel vault Telefono', { username: 'z' })); await saveVaultOf(v.id); });
+  await pc.waitForTimeout(1500);
+  await other.evaluate(() => syncNow(true));
+  await other.waitForFunction(() => live().some(i => i.title === 'Dal PC nel vault Telefono'), null, { timeout: 10000 }).then(() => ok(true, 'vault indipendente sincronizzato col suo cloud'), () => ok(false, 'vault indipendente sincronizzato col suo cloud'));
+  ok(!(await other.evaluate(() => live().some(i => i.title === 'Kenamobile'))), 'gli elementi del vault principale del PC non finiscono nell\'altro vault');
   ok(!errors.length, 'nessun errore JS ' + errors.join(' | '));
   await browser.close(); srv.close();
   console.log(fails ? `\n${fails} FALLITI` : '\nTUTTI OK');

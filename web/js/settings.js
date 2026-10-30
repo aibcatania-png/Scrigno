@@ -88,7 +88,7 @@ function devicesCard() {
   const list = deviceList(S.items);
   return `${group('Dispositivi che sincronizzano questo vault', `<div class="devlist">${list.map(d => `<div class="srow"><span class="stext"><b>${esc(d.title)}${d.f.deviceId === me ? ' (questo)' : ''}</b>
       <small>Ultima sincronizzazione ${fmtDate(+d.f.last)}${d.f.app ? ' · Scrigno ' + esc(d.f.app) : ''}${d.f.account ? ' · ' + esc(d.f.account) : ''}</small></span></div>`).join('') || '<div class="srow"><span class="hint">Nessuno ancora.</span></div>'}
-    <div class="srow"><span class="hint">Se un tuo dispositivo non compare qui, non sta usando lo stesso file nel cloud: sul dispositivo mancante scollega e ricollega ${S.sync.provider === 'gdrive' ? 'Google Drive con lo stesso account' + (S.sync.email ? ' (<b>' + esc(S.sync.email) + '</b>)' : '') + ' e lo stesso Client ID' : 'lo stesso servizio e account'}.</span></div></div>`)}`;
+    <div class="srow"><span class="hint">Ogni vault si sincronizza per conto suo: questo elenco riguarda il vault principale. Se un tuo dispositivo non compare qui, non sta usando lo stesso file nel cloud: sul dispositivo mancante scollega e ricollega ${S.sync.provider === 'gdrive' ? 'Google Drive con lo stesso account' + (S.sync.email ? ' (<b>' + esc(S.sync.email) + '</b>)' : '') + ' e lo stesso Client ID' : 'lo stesso servizio e account'}.</span></div></div>`)}`;
 }
 
 function setSecurity() {

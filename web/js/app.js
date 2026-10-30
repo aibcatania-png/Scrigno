@@ -413,6 +413,8 @@ async function syncNow(silent = false) {
         const r = await syncExtraVault(store, v);
         changed = changed || r.changed;
         v.err = null;
+        v.cfg.lastSync = now();
+        if (v.cfg.provider === 'gdrive' && !v.cfg.email) v.cfg.email = await PROVIDERS.gdrive.account(v.cfg);
       } catch (e) { v.err = e.message; errors.push({ message: `${v.name}: ${e.message}`, code: e.code }); }
       if (key && stableCfg(v.cfg) !== before) { key.f.cloud = JSON.stringify(v.cfg); key.updated = now(); keysChanged = true; }
     }
@@ -1094,9 +1096,9 @@ function vaultCloudPanel(v) {
     ${cloudForm('vault-cloud-connect', v.cfg ? 'Sposta su questo cloud' : 'Collega')}</div>`;
 }
 function vaultsCard() {
-  const rows = [`<div class="vrow"><span class="rtext"><b>${esc(vaultName(MAIN))}</b><small>Vault principale · ${S.items.filter(isActive).length} elementi${S.sync ? ' · ' + PROVIDERS[S.sync.provider].name : ''}</small></span>
+  const rows = [`<div class="vrow"><span class="rtext"><b>${esc(vaultName(MAIN))}</b><small>Vault principale · ${S.items.filter(isActive).length} elementi${S.sync ? ' · ' + PROVIDERS[S.sync.provider].name + (S.sync.email ? ' (' + esc(S.sync.email) + ')' : '') : ''}</small></span>
       <button class="icon" data-act="vault-rename" data-id="${MAIN}" title="Rinomina">${ic('edit')}</button></div>`,
-    ...S.extra.map(v => `<div class="vrow"><span class="rtext"><b>${esc(v.name)}</b><small>${v.file ? v.items.filter(isActive).length + ' elementi' : 'non ancora scaricato su questo dispositivo'}${v.cfg ? ' · ' + PROVIDERS[v.cfg.provider].name : ' · solo su questo dispositivo'}${v.err ? ' · ⚠ ' + esc(v.err) : ''}</small></span>
+    ...S.extra.map(v => `<div class="vrow"><span class="rtext"><b>${esc(v.name)}</b><small>${v.file ? v.items.filter(isActive).length + ' elementi' : 'non ancora scaricato su questo dispositivo'}${v.cfg ? ' · ' + PROVIDERS[v.cfg.provider].name + (v.cfg.email ? ' (' + esc(v.cfg.email) + ')' : '') + (v.cfg.lastSync ? ' · sinc. ' + fmtDate(v.cfg.lastSync) : '') : ' · solo su questo dispositivo'}${v.err ? ' · ⚠ ' + esc(v.err) : ''}</small></span>
       <button class="icon" data-act="vault-rename" data-id="${v.id}" title="Rinomina">${ic('edit')}</button>
       <button class="icon" data-act="vault-cloud" data-id="${v.id}" title="Cloud di questo vault">${ic('cloud')}</button>
       <button class="icon" data-act="vault-export" data-id="${v.id}" title="Esporta backup">${ic('download')}</button>
@@ -1113,6 +1115,13 @@ function vaultsCard() {
         <p class="hint">La password serve per aprire questo vault da solo, per esempio se lo condividi. Conservala: è anche dentro il vault principale.</p>
         <button class="btn primary left" type="submit">Crea vault</button>
       </form></details>
+    <details class="addcloud"><summary class="btn ghost left">${ic('cloud')} Aggiungi un vault dal cloud</summary>
+      <div class="stack" style="margin-top:10px">
+        <p class="hint">Apri qui un vault che è già su un cloud, anche con un altro account (per esempio quello del telefono). Resta indipendente: ha la sua password, il suo account e si sincronizza da solo. Dopo l'aggiunta si sblocca insieme a questo.</p>
+        <label class="lbl">Nome<input name="acName" placeholder="Es. Telefono, Famiglia" autocomplete="off"></label>
+        <label class="lbl">Master password di quel vault<input name="acPw" type="password" autocomplete="off"></label>
+        ${cloudForm('vault-add-cloud', 'Collega e aggiungi')}
+      </div></details>
     <button class="btn ghost left" data-act="pick" data-kind="vault-backup">Aggiungi un vault da backup…</button>
   </div>`;
 }
@@ -1544,6 +1553,40 @@ async function onClick(e) {
         await saveVault();
       }
       renderMain();
+      break;
+    }
+    case 'vault-add-cloud': {
+      const box = b.closest('.addcloud');
+      const name = box.querySelector('[name=acName]').value.trim() || 'Vault dal cloud';
+      const pw = box.querySelector('[name=acPw]').value;
+      if (!pw) throw new Error('Inserisci la master password del vault da aggiungere');
+      const c = await connectCloud(readCloudForm(b.closest('.cloudform')));
+      const remote = await PROVIDERS[c.provider].download(c);
+      if (!remote) throw new Error('In questo cloud (con questo account) non c\'è un vault Scrigno.');
+      if (remote.format !== 'scrigno') throw new Error('Il file nel cloud non è un vault Scrigno.');
+      if (remote.vaultId === S.file.vaultId || S.extra.some(v => v.file && v.file.vaultId === remote.vaultId)) throw new Error('Questo vault è già aperto in Scrigno.');
+      b.disabled = true; b.textContent = 'Apertura…';
+      let v;
+      try { v = await adoptExtraVault({ file: remote, password: pw, name }); } catch (e) {
+        b.disabled = false; b.textContent = 'Collega e aggiungi';
+        throw new Error(e.code === 'keyfile' ? 'Quel vault usa un keyfile: per ora aggiungilo da backup.' : 'Master password del vault errata');
+      }
+      if (c.provider === 'gdrive') c.email = await PROVIDERS.gdrive.account(c);
+      v.cfg = c;
+      v.key.f.cloud = JSON.stringify(c);
+      S.items.push(v.key);
+      // I vault aggiuntivi di quel vault (es. Milena) diventano vault aggiuntivi anche qui.
+      let nested = 0;
+      for (const k of vaultKeyItems(v.items)) {
+        if (vaultKeyItems(S.items).some(x => x.f.vaultId === k.f.vaultId)) continue;
+        S.items.push({ ...k, id: uuid(), updated: now() }); nested++;
+      }
+      await store.set(vaultFileKey(v.id), v.file);
+      await saveVault();
+      await loadExtras();
+      renderMain();
+      toast(`Vault “${name}” aggiunto${nested ? ` con ${nested} vault collegati` : ''}`);
+      syncNow(true);
       break;
     }
     case 'vault-cloud': S.vaultCloud = S.vaultCloud === b.dataset.id ? null : b.dataset.id; renderMain(); break;

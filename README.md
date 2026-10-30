@@ -17,7 +17,7 @@ Cloud supportati: **Dropbox, OneDrive, Google Drive, WebDAV/Nextcloud, iCloud Dr
 
 ## Funzioni
 
-- **Più vault** (es. Personale e Lavoro): ognuno con la sua password e il suo file sul cloud; sbloccando il principale si aprono tutti.
+- **Più vault indipendenti** (es. Personale e Lavoro): ognuno con la sua password, il suo cloud e il suo account, sincronizzato per conto suo; si possono aggiungere vault già presenti su un altro cloud o account (“Aggiungi un vault dal cloud”). Sbloccando il principale si aprono tutti.
 - **Allegati cifrati** (fino a 5 MB l'uno): foto di documenti, PDF, ricevute.
 - **Modelli**: login, carte, identità, note, Wi-Fi, conti bancari, documenti, licenze, server, account email, più i **modelli personalizzati** con i campi che vuoi.
 - **Controllo sicurezza**: password deboli, riutilizzate, vecchie e **trovate in violazioni di dati** (Have I Been Pwned, in forma anonima).
