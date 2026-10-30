@@ -64,7 +64,9 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // Schermo protetto (niente screenshot né anteprima nelle app recenti), salvo scelta diversa nelle impostazioni.
+        if (!getSharedPreferences("scrigno", MODE_PRIVATE).getBoolean("allowShots", false))
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         WebView.setWebContentsDebuggingEnabled(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
         web = WebView(this)
         setContentView(web)
@@ -154,6 +156,13 @@ class MainActivity : AppCompatActivity() {
             "kvSet" -> { Repo.set(this, a.getString("key"), a.get("value").toString()); ok(id) }
             "kvDel" -> { Repo.del(this, a.getString("key")); ok(id) }
             "session" -> { Session.set(this, B64.dec(a.getString("dek")), a.optInt("ttlMin", 5)); ok(id) }
+            "screenshots" -> main.post {
+                val allow = a.optBoolean("allow", false)
+                getSharedPreferences("scrigno", MODE_PRIVATE).edit().putBoolean("allowShots", allow).apply()
+                if (allow) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                ok(id)
+            }
             "afPrefs" -> { AfPrefs.save(this, a.getString("prefs")); ok(id) }
             "lock" -> { Session.clear(); ok(id) }
             "http" -> io.execute {

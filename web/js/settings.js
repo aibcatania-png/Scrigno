@@ -13,7 +13,7 @@ const SETTINGS_DEFAULT = {
   tray: true, autostart: false, hotkey: 'A',
   lockOnClose: true, lockOnSuspend: true, lockOnUserSwitch: true, lockOnScreenLock: true, sysIdleMin: 5,
   backupAuto: true, backupDir: '', backupKeep: 60, backupLast: 0,
-  updateCheck: true, clipboardCheck: false, assistantDocked: false, assistantEnter: true,
+  updateCheck: true, allowScreenshots: false, clipboardCheck: false, assistantDocked: false, assistantEnter: true,
 };
 const SET_TABS = [
   ['general', 'Generali', 'sliders'], ['vault', 'Vault', 'vault'], ['security', 'Sicurezza', 'shield'],
@@ -124,6 +124,7 @@ function setSecurity() {
     ${group('Riservatezza',
       `<div class="srow"><label class="chk"><input type="checkbox" data-pref-on="clipClearSec" ${+st.clipClearSec ? 'checked' : ''}> Svuota gli appunti dopo</label>
         <select data-pref="clipClearSec" ${+st.clipClearSec ? '' : 'disabled'}>${[10, 15, 30, 60, 120].map(v => `<option value="${v}" ${+st.clipClearSec === v ? 'selected' : ''}>${v} secondi</option>`).join('')}</select></div>` +
+      (Native.platform === 'android' ? swRow('allowScreenshots', 'Consenti gli screenshot', 'Di solito Scrigno blocca screenshot e anteprima nelle app recenti, per questo lo screenshot esce nero. Attivalo solo quando ti serve e poi spegnilo.') : '') +
       swRow('hideSecrets', 'Nascondi i campi sensibili', 'Password, PIN e codici restano coperti finché non premi l\'occhio.'))}`;
 }
 
@@ -465,6 +466,7 @@ async function settingsChange(t) {
   } else return false;
   saveSettings();
   pushDesktopPrefs();
+  if (t.dataset.pref === 'allowScreenshots') Native.call('screenshots', { allow: t.checked }).catch(() => {});
   if (['showCounts', 'showSubtitles', 'favicons', 'auditOld', 'hideSecrets'].includes(t.dataset.pref)) renderMain();
   if (t.dataset.pref === 'autoLockMin' || t.dataset.prefOn === 'autoLockMin') shareSession();
   if (t.dataset.pref === 'updateCheck' && t.checked) checkUpdate(false);
