@@ -105,6 +105,12 @@ class MainActivity : AppCompatActivity() {
         handleIntent(intent)
     }
 
+    override fun onPause() {
+        // invia al cloud le modifiche ancora in attesa prima che l'app vada in secondo piano
+        if (::web.isInitialized) event("pause")
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::web.isInitialized) event("resume")

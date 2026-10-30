@@ -61,7 +61,7 @@ function setVault() {
   const reauth = sy && OAUTH_PROVIDERS.includes(sy.provider);
   return `<div class="card stack"><h3>${ic('cloud')} Sincronizzazione del vault principale</h3>
       ${sy ? `<p>Collegato a <b>${PROVIDERS[sy.provider].name}</b>${sy.label ? ` (${esc(sy.label)})` : ''}${sy.lastSync ? ` · ultima sincronizzazione ${fmtDate(sy.lastSync)}` : ''}</p>
-        ${sy.provider === 'gdrive' ? `<p class="hint">App Google n. <b>${esc(String(sy.clientId || '').split('-')[0])}</b> · ${sy.refresh && sy.clientSecret ? 'accesso permanente' : 'accesso da rinnovare ogni ora (manca il client secret)'}. Tutti i dispositivi devono usare la stessa app Google.</p>` : ''}
+        ${sy.provider === 'gdrive' ? `<p class="hint">${sy.email ? `Account <b>${esc(sy.email)}</b> · ` : ''}App Google n. <b>${esc(String(sy.clientId || '').split('-')[0])}</b> · ${sy.refresh && sy.clientSecret ? 'accesso permanente' : 'accesso da rinnovare ogni ora (manca il client secret)'}. Tutti i dispositivi devono usare la stessa app Google.</p>` : ''}
         ${S.syncErr ? `<p class="err">${esc(S.syncErr.message)}</p>` : ''}
         <div class="row-btns"><button class="btn primary" data-act="sync">Sincronizza ora</button>
           ${reauth ? '<button class="btn" data-act="reauth">Riconnetti</button>' : ''}
@@ -69,6 +69,7 @@ function setVault() {
           <button class="btn ghost" data-act="cloud-off">Disconnetti</button></div>`
       : `<p class="hint">Il vault viene caricato già cifrato: il servizio cloud vede solo dati illeggibili.</p>${cloudForm('connect-cloud', 'Connetti')}`}
     </div>
+    ${devicesCard()}
     ${vaultsCard()}
     <div class="card stack"><h3>${ic('download')} Importa ed esporta</h3>
       <div class="row-btns"><button class="btn" data-act="export">Esporta backup cifrato</button>
@@ -78,6 +79,16 @@ function setVault() {
         <button class="btn" data-act="pick" data-kind="csv">Importa CSV</button></div>
       <p class="hint">In Enpass: Impostazioni › Esporta › formato .json. Il CSV può venire da Chrome, Bitwarden o simili. Dopo l'importazione elimina il file esportato, perché non è cifrato. Gli elementi importati finiscono nel vault ${S.extra.length ? 'selezionato in alto nell\'elenco' : 'principale'}.</p>
     </div>`;
+}
+
+// Dispositivi che usano lo stesso file nel cloud: se un telefono manca qui, è collegato a un altro account o a un'altra app Google.
+function devicesCard() {
+  if (!S.sync) return '';
+  const me = deviceId();
+  const list = deviceList(S.items);
+  return `${group('Dispositivi che sincronizzano questo vault', `<div class="devlist">${list.map(d => `<div class="srow"><span class="stext"><b>${esc(d.title)}${d.f.deviceId === me ? ' (questo)' : ''}</b>
+      <small>Ultima sincronizzazione ${fmtDate(+d.f.last)}${d.f.app ? ' · Scrigno ' + esc(d.f.app) : ''}${d.f.account ? ' · ' + esc(d.f.account) : ''}</small></span></div>`).join('') || '<div class="srow"><span class="hint">Nessuno ancora.</span></div>'}
+    <div class="srow"><span class="hint">Se un tuo dispositivo non compare qui, non sta usando lo stesso file nel cloud: sul dispositivo mancante scollega e ricollega ${S.sync.provider === 'gdrive' ? 'Google Drive con lo stesso account' + (S.sync.email ? ' (<b>' + esc(S.sync.email) + '</b>)' : '') + ' e lo stesso Client ID' : 'lo stesso servizio e account'}.</span></div></div>`)}`;
 }
 
 function setSecurity() {

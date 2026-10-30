@@ -174,15 +174,24 @@ const GDrive = {
   },
   async api(c, url, opt = {}) {
     const auth = async () => ({ ...(opt.headers || {}), Authorization: 'Bearer ' + await this.token(c) });
-    let r = await Cloud.env.fetch(url, { ...opt, headers: await auth() });
+    // no-store: mai una copia del vault presa dalla cache del browser
+    let r = await Cloud.env.fetch(url, { cache: 'no-store', ...opt, headers: await auth() });
     if (r.status === 401) {
       c.access = null;
       if (!c.refresh) throw reauthErr();
-      r = await Cloud.env.fetch(url, { ...opt, headers: await auth() });
+      r = await Cloud.env.fetch(url, { cache: 'no-store', ...opt, headers: await auth() });
       if (r.status === 401) throw reauthErr();
     }
     if (!r.ok && r.status !== 404) throw new Error('Google Drive: errore ' + r.status);
     return r;
+  },
+  // Account Google collegato (per controllare che tutti i dispositivi usino lo stesso).
+  async account(c) {
+    try {
+      const r = await this.api(c, 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)');
+      const j = await r.json();
+      return (j && j.user && j.user.emailAddress) || '';
+    } catch { return ''; }
   },
   // Il file si cerca sempre per nome (non si memorizza l'ID): se due dispositivi hanno creato
   // ciascuno un proprio file con lo stesso nome, tutti usano il più vecchio, così i dati si riuniscono.

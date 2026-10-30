@@ -340,15 +340,45 @@ function setupCloudEnv() {
 // ---------------------------------------------------------------- sincronizzazione
 let syncTimer = null, syncing = false;
 const hasAnySync = () => !!S.sync || S.extra.some(v => v.cfg);
-function scheduleSync(ms = 1500) {
+function scheduleSync(ms = 800) {
   if (!hasAnySync()) return;
   clearTimeout(syncTimer);
+  syncPending = true;
   syncTimer = setTimeout(() => syncNow(true), ms);
+}
+// Se l'app va in secondo piano o si chiude con una modifica non ancora inviata, la invia subito.
+let syncPending = false, verifyTimer = null, verifyTimer2 = null;
+function flushSync() {
+  if (!syncPending || !S.dek) return;
+  clearTimeout(syncTimer);
+  syncNow(true);
+}
+function deviceId() {
+  let id = '';
+  try { id = localStorage.getItem('scrigno-device') || ''; } catch { /* ignora */ }
+  if (!id) { id = b64u.to(rand(9)); try { localStorage.setItem('scrigno-device', id); } catch { /* ignora */ } }
+  return id;
+}
+function deviceName() {
+  if (S.settings.deviceName) return S.settings.deviceName;
+  const ua = navigator.userAgent;
+  const os = Native.platform === 'android' || /Android/.test(ua) ? 'Android' : Native.platform === 'ios' || /iPhone|iPad/.test(ua) ? 'iPhone/iPad'
+    : Native.platform === 'win32' || /Windows/.test(ua) ? 'Windows' : Native.platform === 'darwin' || /Mac OS/.test(ua) ? 'Mac' : 'Linux';
+  const app = Native.desktop ? 'app' : Native.mobile ? 'app' : /Edg\//.test(ua) ? 'Edge' : /Firefox/.test(ua) ? 'Firefox' : /Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'browser';
+  return `${os} · ${app === 'app' ? 'app Scrigno' : 'web app ' + app}`;
+}
+// Barra in alto quando la sincronizzazione non riesce: prima era visibile solo nelle impostazioni.
+function syncBanner() {
+  if (!S.syncErr || !S.sync) return '';
+  const re = S.syncErr.code === 'reauth' && OAUTH_PROVIDERS.includes(S.sync.provider);
+  return `<div class="syncbar">${ic('cloudErr')}<span>Sincronizzazione non riuscita: ${esc(S.syncErr.message)}</span>
+    ${re ? '<button class="btn small" data-act="reauth">Riconnetti</button>' : '<button class="btn small" data-act="sync">Riprova</button>'}</div>`;
 }
 async function syncNow(silent = false) {
   if (!S.dek || !hasAnySync()) return;
   if (syncing) { scheduleSync(3000); return; }
   syncing = true;
+  syncPending = false;
   setSync('busy');
   let changed = false;
   const errors = [];
@@ -356,9 +386,18 @@ async function syncNow(silent = false) {
     if (S.sync) {
       try {
         await mergeFromDisk();
+        if (deviceStamp(S.items, deviceId(), deviceName(), { app: (CONFIG && CONFIG.version) || '', account: S.sync.email || '' })) await persist();
         const r = await cloudSync({ file: S.file, dek: S.dek, items: S.items, cfg: S.sync });
+        if (S.sync.provider === 'gdrive' && !S.sync.email) S.sync.email = await PROVIDERS.gdrive.account(S.sync);
         S.items = r.items;
         if (r.changedLocal || r.uploaded) { await store.set('vault', S.file); pushIdentities(); }
+        // Se un altro dispositivo carica il suo file nello stesso istante, potrebbe coprire il nostro:
+        // una verifica poco dopo lo riunisce e lo ricarica.
+        if (r.uploaded) {
+          clearTimeout(verifyTimer); clearTimeout(verifyTimer2);
+          verifyTimer = setTimeout(() => syncNow(true), 5000);
+          verifyTimer2 = setTimeout(() => syncNow(true), 15000);
+        }
         changed = changed || r.changedLocal;
         S.sync.lastSync = now();
         await saveSyncCfg(S.sync);
@@ -378,9 +417,12 @@ async function syncNow(silent = false) {
       if (key && stableCfg(v.cfg) !== before) { key.f.cloud = JSON.stringify(v.cfg); key.updated = now(); keysChanged = true; }
     }
     if (keysChanged) { await persist(); if (S.sync) await cloudSync({ file: S.file, dek: S.dek, items: S.items, cfg: S.sync }).catch(() => {}); }
+    const wasErr = S.syncErr && S.syncErr.message;
     S.syncErr = errors[0] || null;
     setSync(errors.length ? 'err' : 'ok');
-    if (errors.length && !silent) toast(errors[0].message, 4500);
+    // Un errore nuovo si mostra sempre, anche nelle sincronizzazioni automatiche, insieme alla barra in alto.
+    if (errors.length && (!silent || errors[0].message !== wasErr)) toast(errors[0].message, 6000);
+    if (!!wasErr !== !!S.syncErr && S.dek && !S.view.edit) renderMain();
     if (changed && S.dek && !S.view.edit) renderMain();
   } finally {
     syncing = false;
@@ -568,6 +610,7 @@ function renderMain() {
         </div>
       </div>
     </aside>
+    ${syncBanner()}
     ${page ? `<section class="page">${pageHtml}</section>`
       : `<section class="list">
           <div class="list-head"><input id="q" type="search" placeholder="Cerca" value="${esc(v.q)}" autocomplete="off" title="Cerca (Ctrl+F)">${v.section === 'trash' ? '' : `<button class="btn primary addbtn" data-act="new" title="Nuovo elemento (Ctrl+N)">${ic('plus')}<span class="nl">Nuovo</span></button>`}</div>
@@ -1604,7 +1647,7 @@ async function onClick(e) {
     case 'reauth': {
       const old = S.sync;
       const c = await connectCloud({ provider: old.provider, clientId: old.clientId, clientSecret: old.clientSecret, appKey: old.appKey });
-      await saveSyncCfg({ ...old, ...c });
+      await saveSyncCfg({ ...old, ...c, email: '' });
       // aggiorna anche i vault aggiuntivi sullo stesso servizio
       for (const v of S.extra) if (v.cfg && v.cfg.provider === c.provider && (!v.cfg.refresh || v.cfg.refresh === old.refresh)) Object.assign(v.cfg, { access: c.access, exp: c.exp, refresh: c.refresh || v.cfg.refresh, clientSecret: c.clientSecret || v.cfg.clientSecret });
       S.syncErr = null;
@@ -1835,9 +1878,12 @@ async function boot() {
     if (S.dek && +S.settings.autoLockMin > 0 && now() - lastAct > S.settings.autoLockMin * 60000) lock();
     else if (S.dek) tickTotp();
   }, 1000);
-  setInterval(() => syncNow(true), 5 * 60000);
+  // controllo frequente mentre l'app è aperta e visibile, così le modifiche degli altri dispositivi arrivano presto
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow(true); }, 60000);
   addEventListener('online', () => scheduleSync(500));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onResume(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onResume(); else flushSync(); });
+  addEventListener('pagehide', flushSync);
+  Native.on('pause', flushSync);
   Native.on('resume', () => onResume());
   Native.on('vaultChanged', () => onResume());
   Native.on('lock', () => { if (S.dek) lock(); });

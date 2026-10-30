@@ -428,3 +428,12 @@ p.ok { color: var(--ok); font-weight: 600; }
 .as-acts .icon { width: 30px; height: 30px; }
 .as-acts .ico { width: 17px; height: 17px; }
 .as-enter { padding: 10px 14px; border-top: 1px solid var(--line); }
+
+/* Errore di sincronizzazione sempre visibile */
+.syncbar { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px;
+  max-width: min(640px, calc(100vw - 32px)); padding: 9px 10px 9px 14px; border-radius: 12px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--danger); box-shadow: 0 12px 30px -10px rgba(10, 25, 45, .35); font-size: 13.5px; }
+.syncbar > .ico { color: var(--danger); width: 18px; height: 18px; flex: none; }
+.syncbar span { flex: 1; min-width: 0; }
+.syncbar .btn { flex: none; }
+.devlist .srow small { display: block; }

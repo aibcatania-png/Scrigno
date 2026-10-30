@@ -288,6 +288,19 @@ function matchLogins(items, { host, pkg, exact }) {
   });
 }
 
+// Dispositivi che sincronizzano il vault: un elemento interno "_device" per dispositivo, aggiornato
+// al massimo ogni ora. Serve a vedere da qualunque dispositivo chi sta usando lo stesso file nel cloud.
+function deviceStamp(items, id, name, extra = {}) {
+  let it = items.find(i => i.type === '_device' && !i.deleted && i.f && i.f.deviceId === id);
+  if (it && it.title === name && now() - (+it.f.last || 0) < 3600e3) return false;
+  if (!it) { it = makeItem('_device', name, { deviceId: id }); items.push(it); }
+  it.title = name;
+  it.f = { ...it.f, ...extra, last: String(now()) };
+  it.updated = now();
+  return true;
+}
+const deviceList = items => items.filter(i => i.type === '_device' && !i.deleted).sort((a, b) => (+b.f.last || 0) - (+a.f.last || 0));
+
 // Preferenze di compilazione automatica: nel vault (elemento interno "_prefs"), uguali su tutti i dispositivi.
 const AF_DEFAULT = { autoSubmit: false, otpCopy: true, fillSingle: false, exactMatch: false, lockedSuggest: true, askSave: true, ignore: [] };
 function afPrefs(items) {
