@@ -221,7 +221,7 @@ function pushDesktopPrefs() {
 // Le preferenze di compilazione servono anche al servizio Android a vault bloccato.
 function pushAfPrefs() {
   if (Native.platform !== 'android' || !S.dek) return;
-  Native.call('afPrefs', { prefs: JSON.stringify(afPrefs(S.items)) }).catch(() => {});
+  Native.call('afPrefs', { prefs: JSON.stringify({ ...afPrefs(S.items), icons: S.settings.favicons !== false }) }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- icone dei siti
@@ -468,6 +468,7 @@ async function settingsChange(t) {
   pushDesktopPrefs();
   if (t.dataset.pref === 'allowScreenshots') Native.call('screenshots', { allow: t.checked }).catch(() => {});
   if (['showCounts', 'showSubtitles', 'favicons', 'auditOld', 'hideSecrets'].includes(t.dataset.pref)) renderMain();
+  if (t.dataset.pref === 'favicons') pushAfPrefs();
   if (t.dataset.pref === 'autoLockMin' || t.dataset.prefOn === 'autoLockMin') shareSession();
   if (t.dataset.pref === 'updateCheck' && t.checked) checkUpdate(false);
   toast('Impostazione salvata');

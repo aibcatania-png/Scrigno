@@ -47,7 +47,7 @@ class ScrignoAutofillService : AutofillService() {
                 matches.take(6).forEach { resp.addDataset(Fill.dataset(this, it, t)) }
             }
         }
-        resp.addDataset(Fill.authDataset(this, t, if (dek == null) "Sblocca Scrigno" else "Cerca in Scrigno…"))
+        resp.addDataset(Fill.authDataset(this, t, if (dek == null) "Sblocca Scrigno" else "Altri login in Scrigno…"))
         if (t.passwordId != null && prefs.askSave) {
             val type = SaveInfo.SAVE_DATA_TYPE_PASSWORD or (if (t.usernameId != null) SaveInfo.SAVE_DATA_TYPE_USERNAME else 0)
             resp.setSaveInfo(SaveInfo.Builder(type, listOfNotNull(t.usernameId, t.passwordId).toTypedArray()).build())
@@ -78,16 +78,18 @@ object Fill {
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)).toString()
     } catch (e: Exception) { null }
 
-    fun presentation(ctx: Context, title: String, sub: String?): RemoteViews =
+    fun presentation(ctx: Context, title: String, sub: String?, icon: android.graphics.Bitmap? = null): RemoteViews =
         RemoteViews(ctx.packageName, R.layout.autofill_item).apply {
             setTextViewText(R.id.title, title)
             setTextViewText(R.id.subtitle, sub ?: "")
+            if (icon != null) setImageViewBitmap(R.id.icon, icon)
         }
+    private fun iconPx(ctx: Context) = (34 * ctx.resources.displayMetrics.density).toInt()
 
     @Suppress("DEPRECATION")
     fun dataset(ctx: Context, item: JSONObject, t: Target): Dataset {
         val user = Vault.field(item, "username")
-        val b = Dataset.Builder(presentation(ctx, item.optString("title"), user.ifEmpty { "Scrigno" }))
+        val b = Dataset.Builder(presentation(ctx, item.optString("title"), user.ifEmpty { app.scrigno.Icons.hostOf(item) ?: "Scrigno" }, app.scrigno.Icons.forItem(ctx, item, iconPx(ctx))))
         var any = false
         t.usernameId?.let { if (user.isNotEmpty()) { b.setValue(it, AutofillValue.forText(user)); any = true } }
         t.passwordId?.let { val p = Vault.field(item, "password"); if (p.isNotEmpty()) { b.setValue(it, AutofillValue.forText(p)); any = true } }
@@ -98,7 +100,7 @@ object Fill {
     @Suppress("DEPRECATION")
     fun otpDataset(ctx: Context, item: JSONObject, t: Target): Dataset? {
         val code = try { Totp.code(Totp.parse(Vault.field(item, "totp"))) } catch (e: Exception) { return null }
-        return Dataset.Builder(presentation(ctx, "Codice 2FA $code", item.optString("title")))
+        return Dataset.Builder(presentation(ctx, "Codice 2FA $code", item.optString("title"), app.scrigno.Icons.forItem(ctx, item, iconPx(ctx))))
             .setValue(t.otpId!!, AutofillValue.forText(code)).build()
     }
 
