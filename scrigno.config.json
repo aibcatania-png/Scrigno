@@ -1,8 +1,13 @@
 {
-  "version": "1.7.1",
+  "version": "1.8.0",
   "appId": "app.scrigno.passwords",
   "pagesUrl": "",
   "firefoxId": "scrigno@scrigno.app",
   "chromeKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr2O4Tm54Q3acS55c7U3IF0iye6h6VJuqRG2i3YPsRQYLfOMTEej8IIqm4CGLJ7xLziVwXcmB6VFKvyO5tZNzc9UbKjxX/bqpJ20r1ZjvYGDbh1idfzjYQo/skEIS8wxm+L4BzNsUBWk2i4Zv/As6EFNqlIi6t55j6AsyIItjYLe296SjRyeV+2aeR6F1349brv5fJVKk58gdGyu5L1rJbYZaOKQKj98MFsaTdPqHnpkqXmSlgjFd/4iAhBMBe9fccdZ8yJvfvOJ8S+MNQCycpxaUXarzelYa/lC3r4HWScM+felhkuEApA0qIIGhLwIvY9Ka9+v9BzrpR1Dvd7OEwQIDAQAB",
-  "chromeId": "fcamedobbplknjdnnldngkghapdcakik"
+  "chromeId": "fcamedobbplknjdnnldngkghapdcakik",
+  "cloud": {
+    "gdrive": {
+      "clientId": "250757451290-414udqmtu3o1qqv74m8pp8f2jnrr6c9l.apps.googleusercontent.com"
+    }
+  }
 }

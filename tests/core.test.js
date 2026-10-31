@@ -133,6 +133,11 @@ const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console
   R(`__gh = []; genHistoryAdd(__gh, 'aaa', 'x.it'); genHistoryAdd(__gh, 'bbb'); genHistoryAdd(__gh, 'aaa', 'y.it')`);
   const gh = R(`genHistory(__gh)`);
   ok(gh.length === 2 && gh[0].pw === 'aaa' && gh[0].site === 'y.it' && R(`!isActive(__gh[0])`), 'cronologia generatore nel vault (nascosta)');
+  // accesso ai cloud già pronto
+  R(`self.SCRIGNO_CONFIG = { cloud: { gdrive: { clientId: 'BUILT', clientSecret: 'S' }, dropbox: { appKey: '' } } }`);
+  ok(R(`withBuiltIn({ provider: 'gdrive' }).clientSecret`) === 'S' && R(`withBuiltIn({ provider: 'gdrive', clientId: 'MIO' }).clientId`) === 'MIO' && !R(`withBuiltIn({ provider: 'gdrive', clientId: 'MIO' }).clientSecret`), 'cloud già pronto, ma un\'app propria ha la precedenza');
+  ok(!R(`builtInCloud('dropbox')`) && !!R(`builtInCloud('gdrive')`), 'cloud già pronti solo se configurati');
+  R(`self.SCRIGNO_CONFIG = {}`);
   // Google Drive con refresh token (servizio finto)
   ctx.__glog = [];
   R(`Cloud.env = { redirect: () => 'https://x/oauth-app.html', authorize: async (h, url, st) => { __glog.push(url); return { code: 'C1', state: st }; },

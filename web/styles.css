@@ -437,3 +437,6 @@ p.ok { color: var(--ok); font-weight: 600; }
 .syncbar span { flex: 1; min-width: 0; }
 .syncbar .btn { flex: none; }
 .devlist .srow small { display: block; }
+
+.hint.ready { display: flex; gap: 8px; align-items: flex-start; color: var(--text); background: var(--acc-soft); padding: 10px 12px; border-radius: var(--r-s); }
+.hint.ready .ico { color: var(--ok); width: 18px; height: 18px; flex: none; margin-top: 1px; }

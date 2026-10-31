@@ -97,6 +97,13 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR
   const after = await page.evaluate(() => ({ live: live().map(i => i.title), trash: trashedItems().map(i => i.title), prefs: afPrefs(S.items).exactMatch }));
   ok(!after.live.includes('Nuovo dopo il backup') && after.trash.includes('Nuovo dopo il backup') && after.live.includes('GitHub') && after.prefs, 'ripristino del backup (gli elementi nuovi vanno nel cestino)');
   if (shots) await page.screenshot({ path: path.join(shots, 'set-backup.png') });
+  // accesso ai cloud già pronto
+  await page.evaluate(() => { self.SCRIGNO_CONFIG.cloud = { gdrive: { clientId: 'x.apps.googleusercontent.com', clientSecret: 'y' } }; });
+  await page.click('.stabs [data-k=vault]');
+  await page.selectOption('.sbody [data-role=prov]', 'gdrive');
+  ok(await page.isVisible('.sbody .hint.ready') && !(await page.$('.sbody [data-c=clientId]')), 'Google Drive già pronto: nessun Client ID da inserire');
+  await page.click('.sbody [data-act=cloud-custom]');
+  ok(await page.isVisible('.sbody [data-c=clientId]'), 'opzione avanzata: app propria');
   // aggiornamenti
   await page.click('.stabs [data-k=advanced]');
   await page.click('[data-act=upd-check]');

@@ -9,7 +9,7 @@ import json, os, shutil, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
-from configure import load  # noqa: E402
+from configure import load, public  # noqa: E402
 
 SRC = os.path.join(ROOT, 'extension', 'src')
 SHARED = ['core.js', 'words.js', 'cloud.js', 'vaults.js', 'passkey.js']
@@ -56,7 +56,7 @@ def build():
         for f in SHARED:
             shutil.copy(os.path.join(ROOT, 'web', 'js', f), os.path.join(out, f))
         with open(os.path.join(out, 'config.js'), 'w') as fh:
-            fh.write('self.SCRIGNO_CONFIG = ' + json.dumps({'pagesUrl': cfg.get('pagesUrl', ''), 'version': cfg['version']}) + ';\n')
+            fh.write('self.SCRIGNO_CONFIG = ' + json.dumps(public(cfg)) + ';\n')
         if browser != 'firefox':
             with open(os.path.join(out, 'sw.js'), 'w') as fh:
                 fh.write('importScripts(' + ', '.join(repr(f) for f in BG) + ');\n')

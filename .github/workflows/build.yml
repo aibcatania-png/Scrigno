@@ -12,6 +12,10 @@ permissions:
 
 env:
   NODE_VERSION: '22'
+  # Accesso ai cloud già pronto (Impostazioni del repository › Secrets and variables › Actions)
+  SCRIGNO_GDRIVE_CLIENT_SECRET: ${{ secrets.SCRIGNO_GDRIVE_CLIENT_SECRET }}
+  SCRIGNO_DROPBOX_APP_KEY: ${{ vars.SCRIGNO_DROPBOX_APP_KEY }}
+  SCRIGNO_ONEDRIVE_CLIENT_ID: ${{ vars.SCRIGNO_ONEDRIVE_CLIENT_ID }}
 
 jobs:
   test:

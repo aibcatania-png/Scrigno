@@ -246,7 +246,21 @@ const OAUTH_PROVIDERS = ['dropbox', 'onedrive', 'gdrive'];
 const providerList = () => Object.keys(PROVIDERS).filter(k => k !== 'folder' || (Cloud.env && Cloud.env.folder));
 
 // Da chiamare direttamente nel gestore del clic (il popup della web app va aperto prima di ogni await).
+// Accesso già pronto: l'app Scrigno registrata presso il servizio (da config.js). Si usa quando
+// l'utente non indica una propria app; con una propria app (avanzato) valgono i suoi dati.
+const BUILTIN_ID = { gdrive: 'clientId', dropbox: 'appKey', onedrive: 'clientId' };
+function builtInCloud(p) {
+  const all = (typeof self !== 'undefined' && self.SCRIGNO_CONFIG && self.SCRIGNO_CONFIG.cloud) || {};
+  const b = all[p];
+  return b && b[BUILTIN_ID[p]] ? b : null;
+}
+function withBuiltIn(cfg) {
+  const b = builtInCloud(cfg.provider);
+  if (!b || cfg[BUILTIN_ID[cfg.provider]]) return cfg;
+  return { ...cfg, ...b };
+}
 function connectCloud(cfg) {
+  cfg = withBuiltIn(cfg);
   let h = null;
   try { if (OAUTH_PROVIDERS.includes(cfg.provider)) h = Cloud.env.begin(); } catch (e) { return Promise.reject(e); }
   return PROVIDERS[cfg.provider].connect(cfg, h).finally(() => { if (h && h.close) h.close(); });

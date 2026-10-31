@@ -332,7 +332,7 @@ const handlers = {
   async state() {
     const kfOn = !!(B.file && B.file.kdf && B.file.kdf.keyfile);
     return { hasVault: !!B.file, unlocked: !!B.dek, keyfile: kfOn, kfRemembered: kfOn && !!(await local.get('kf-' + B.file.vaultId)), vaults: B.extra.length + 1, sync: B.sync ? { provider: B.sync.provider, name: PROVIDERS[B.sync.provider].name, lastSync: B.sync.lastSync } : null,
-      syncState: B.syncState, syncErr: B.syncErr, settings: B.settings, providers: providerList().map(k => [k, PROVIDERS[k].name]), redirect: Cloud.env.redirect() };
+      syncState: B.syncState, syncErr: B.syncErr, settings: B.settings, providers: providerList().map(k => [k, PROVIDERS[k].name]), redirect: Cloud.env.redirect(), builtIn: OAUTH_PROVIDERS.filter(p => builtInCloud(p)) };
   },
   async unlock({ password, kf, remember }) {
     const needKf = !!(B.file && B.file.kdf && B.file.kdf.keyfile);

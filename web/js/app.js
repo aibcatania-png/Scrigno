@@ -1024,6 +1024,10 @@ function redirectHint() {
 }
 function provFields(p) {
   const ids = loadIds();
+  if (builtInCloud(p) && !(S.cloudCustom || {})[p]) {
+    return `<p class="hint ready">${ic('cloudOk')} <span>Pronto: premi <b>Connetti</b> e accedi con il tuo account ${PROVIDERS[p].name}. Il vault viene salvato in una cartella privata di Scrigno, già cifrato.</span></p>
+      <button type="button" class="link" data-act="cloud-custom" data-p="${p}">Usa una mia app ${p === 'gdrive' ? 'Google' : p === 'dropbox' ? 'Dropbox' : 'Microsoft'} (avanzato)</button>`;
+  }
   if (p === 'dropbox') {
     return `<label class="lbl">App key Dropbox<input data-c="appKey" value="${esc(ids.appKey || '')}" autocomplete="off"></label>
       <p class="hint">App creata su dropbox.com/developers (accesso “App folder”) con questo Redirect URI: ${redirectHint()}</p>`;
@@ -1056,9 +1060,9 @@ function cloudForm(act, label) {
 function readCloudForm(root) {
   const cfg = { provider: root.querySelector('[data-role=prov]').value };
   root.querySelectorAll('[data-c]').forEach(i => { cfg[i.dataset.c] = i.value.trim(); });
-  if (cfg.provider === 'dropbox') saveIds({ appKey: cfg.appKey });
-  if (cfg.provider === 'onedrive') saveIds({ msClientId: cfg.clientId });
-  if (cfg.provider === 'gdrive') saveIds({ clientId: cfg.clientId, gSecret: cfg.clientSecret });
+  if (cfg.provider === 'dropbox' && cfg.appKey) saveIds({ appKey: cfg.appKey });
+  if (cfg.provider === 'onedrive' && cfg.clientId) saveIds({ msClientId: cfg.clientId });
+  if (cfg.provider === 'gdrive' && cfg.clientId) saveIds({ clientId: cfg.clientId, gSecret: cfg.clientSecret });
   return cfg;
 }
 
@@ -1483,6 +1487,11 @@ async function onClick(e) {
       inp.value = genPassword(genCfg()); inp.type = 'text'; updateMeter(inp);
       const u = document.querySelector('[name=f_url]');
       await genUsed(inp.value, u && u.value ? baseDomain(hostOf(u.value)) : '');
+      break;
+    }
+    case 'cloud-custom': {
+      S.cloudCustom = { ...(S.cloudCustom || {}), [b.dataset.p]: true };
+      b.closest('.cloudform').querySelector('[data-role=pf]').innerHTML = provFields(b.dataset.p);
       break;
     }
     case 'gen-dlg': genDialog(b.closest('.lbl').querySelector('input')); break;

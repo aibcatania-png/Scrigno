@@ -84,6 +84,19 @@ Senza un account Apple Developer (a pagamento) un'app non si può installare sta
 
 Il codice dell'app iOS (cartella `ios/`) resta nel progetto: se in futuro attivi l'account Apple Developer, basta aggiungere i segreti indicati sopra e avviare il workflow a mano.
 
+## Accesso ai cloud già pronto
+
+Per gli utenti finali Scrigno include le proprie app registrate presso Google, Dropbox e Microsoft: si sceglie il servizio, si preme **Connetti** e si accede con il proprio account, senza creare nulla. I dati arrivano dalla build:
+
+| Dove | Nome | Tipo |
+|---|---|---|
+| `scrigno.config.json` › `cloud.gdrive.clientId` | Client ID Google (pubblico) | file |
+| GitHub › Secrets | `SCRIGNO_GDRIVE_CLIENT_SECRET` | segreto |
+| GitHub › Variables | `SCRIGNO_DROPBOX_APP_KEY` | variabile |
+| GitHub › Variables | `SCRIGNO_ONEDRIVE_CLIENT_ID` | variabile |
+
+Un servizio senza dati resta configurabile a mano come sotto (“Usa una mia app”). Gli indirizzi di ritorno da registrare sono gli stessi della tabella seguente, più quello dell'estensione Firefox: `https://fd741b7d65255beaf6316b0c67f3b12796d106cd.extensions.allizom.org/oauth`.
+
 ## Configurare i cloud
 
 Ogni servizio richiede una tua “app” gratuita presso il fornitore, con questi indirizzi di ritorno (sostituisci con il tuo indirizzo Pages):
